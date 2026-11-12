@@ -123,8 +123,10 @@ class GestureStrip(
             val edge = if (onRight) width.toFloat() else 0f
             val dir = if (onRight) -1f else 1f
             val r = context.dp(4f)
-            shadow.alpha = if (alphaBoost) 140 else 70
-            line.alpha = if (alphaBoost) 255 else 150
+            val k = if (alphaBoost) 1f else prefs.stripOpacity
+            shadow.alpha = (70 * k).toInt()
+            line.alpha = (255 * k).toInt()
+            if (k <= 0f) return
 
             val x2 = edge + dir * (context.dp(2f) + outerW)
             rect.set(minOf(edge + dir * context.dp(2f), x2), top, maxOf(edge + dir * context.dp(2f), x2), top + len)

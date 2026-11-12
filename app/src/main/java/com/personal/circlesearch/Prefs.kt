@@ -51,6 +51,11 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getFloat(K_STRIP_Y, 0.6f).coerceIn(0f, 1f)
         set(value) { sp.edit().putFloat(K_STRIP_Y, value.coerceIn(0f, 1f)).apply() }
 
+    /** Edge handle opacity, 0.0 (invisible, still tappable) .. 1.0 */
+    var stripOpacity: Float
+        get() = sp.getFloat(K_STRIP_ALPHA, 0.6f).coerceIn(0f, 1f)
+        set(value) { sp.edit().putFloat(K_STRIP_ALPHA, value.coerceIn(0f, 1f)).apply() }
+
     fun register(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         sp.registerOnSharedPreferenceChangeListener(listener)
     }
@@ -67,6 +72,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"
+        private const val K_STRIP_ALPHA = "strip_opacity"
         private const val K_BUBBLE = "bubble_enabled"
         private const val K_OPACITY = "bubble_opacity"
         private const val K_SIZE = "bubble_size_dp"

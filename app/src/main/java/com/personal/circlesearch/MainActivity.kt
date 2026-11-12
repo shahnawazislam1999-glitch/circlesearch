@@ -81,6 +81,16 @@ class MainActivity : AppCompatActivity() {
         val sizeDp = prefs.bubbleSizeDp.coerceIn(32, 72)
         sliderSize.value = sizeDp.toFloat()
         textSize.text = "$sizeDp dp"
+        val sliderStrip: Slider = findViewById(R.id.sliderStripOpacity)
+        val textStrip: TextView = findViewById(R.id.textStripOpacity)
+        val stripPct = (prefs.stripOpacity * 100f).roundToInt().coerceIn(0, 100)
+        sliderStrip.value = stripPct.toFloat()
+        textStrip.text = "$stripPct%"
+        sliderStrip.setLabelFormatter { "${it.toInt()}%" }
+        sliderStrip.addOnChangeListener { _, value, fromUser ->
+            textStrip.text = "${value.toInt()}%"
+            if (fromUser) prefs.stripOpacity = value / 100f
+        }
         switchGesture.isChecked = prefs.gestureStrip
         rgLens.check(if (prefs.lensMode == Prefs.WEB_WINDOW) R.id.rbWebWindow else R.id.rbLensApp)
 

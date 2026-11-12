@@ -143,7 +143,7 @@ class SelectionOverlay(
                 null
             )
             val top = statusBar + dp(8f)
-            closeRect.set(w - dp(16f + 44f), top, w - dp(16f), top + dp(44f))
+            closeRect.setEmpty() // close button removed; Back still cancels
         }
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -173,15 +173,7 @@ class SelectionOverlay(
 
             if (searching) {
                 drawPill(canvas, "Searching with Lens…", width / 2f, height - dp(120f))
-            } else if (!drawing && path.isEmpty) {
-                drawPill(canvas, "Circle or tap anything to search", width / 2f, closeRect.centerY())
             }
-
-            // Close button
-            canvas.drawCircle(closeRect.centerX(), closeRect.centerY(), dp(22f), pillPaint)
-            val a = dp(7f)
-            canvas.drawLine(closeRect.centerX() - a, closeRect.centerY() - a, closeRect.centerX() + a, closeRect.centerY() + a, iconPaint)
-            canvas.drawLine(closeRect.centerX() + a, closeRect.centerY() - a, closeRect.centerX() - a, closeRect.centerY() + a, iconPaint)
         }
 
         private fun drawPill(c: Canvas, text: String, cx: Float, cy: Float) {
