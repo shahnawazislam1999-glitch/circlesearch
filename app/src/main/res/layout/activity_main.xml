@@ -280,7 +280,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Two-finger tap gesture"
+                        android:text="Edge handle (one tap)"
                         android:textAppearance="?attr/textAppearanceTitleMedium"
                         android:textColor="?attr/colorOnSurface" />
 
@@ -294,7 +294,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="Tap with two fingers on the faint edge handle (on the side opposite the bubble) to start the lasso instantly."
+                    android:text="Tap the faint handle on the screen edge once to start the lasso. Press and hold it, then drag, to move it anywhere along the left or right edge."
                     android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>

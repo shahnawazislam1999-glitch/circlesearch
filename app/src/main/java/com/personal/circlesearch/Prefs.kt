@@ -42,6 +42,15 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getFloat(K_YFRAC, 0.35f).coerceIn(0f, 1f)
         set(value) { sp.edit().putFloat(K_YFRAC, value.coerceIn(0f, 1f)).apply() }
 
+    /** Edge handle: which side it sits on and its vertical position (fraction of screen height). */
+    var stripOnRight: Boolean
+        get() = sp.getBoolean(K_STRIP_RIGHT, false)
+        set(value) { sp.edit().putBoolean(K_STRIP_RIGHT, value).apply() }
+
+    var stripYFraction: Float
+        get() = sp.getFloat(K_STRIP_Y, 0.6f).coerceIn(0f, 1f)
+        set(value) { sp.edit().putFloat(K_STRIP_Y, value.coerceIn(0f, 1f)).apply() }
+
     fun register(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         sp.registerOnSharedPreferenceChangeListener(listener)
     }
@@ -56,6 +65,8 @@ class Prefs private constructor(private val sp: SharedPreferences) {
 
         private const val FILE = "circle_search_prefs"
         private const val K_ACTIVE = "service_active"
+        private const val K_STRIP_RIGHT = "strip_on_right"
+        private const val K_STRIP_Y = "strip_y_fraction"
         private const val K_BUBBLE = "bubble_enabled"
         private const val K_OPACITY = "bubble_opacity"
         private const val K_SIZE = "bubble_size_dp"

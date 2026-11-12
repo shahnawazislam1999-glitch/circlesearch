@@ -16,7 +16,7 @@ No Gradle wrapper is needed: the workflow installs Gradle 8.9, JDK 17 and the An
 
 ## Notes
 - Everything runs as accessibility overlays, so no "draw over other apps" permission is needed.
-- Two-finger tap: tap with two fingers on the faint edge handle (opposite side from the bubble).
+- Edge handle: tap the faint handle once to search; press, hold and drag to move it anywhere along either edge.
 - Lens app floating window needs freeform windows (Developer options). Otherwise use
   "Built-in floating Lens window" in the app.
 - The built-in window uses Google Lens' web upload endpoint, which is unofficial and could change.
