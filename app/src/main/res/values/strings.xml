@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Circle Search</string>
+    <string name="accessibility_description">Lets Circle Search capture the screen when you tap the bubble, so you can circle something and search it with Google Lens. Nothing is read, logged or stored.</string>
+</resources>
