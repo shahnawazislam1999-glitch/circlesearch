@@ -26,7 +26,10 @@ class SelectionOverlay(
     private val context: Context,
     private val screenshot: Bitmap,
     private val onSelected: (Bitmap) -> Unit,
-    private val onCancel: () -> Unit
+    private val onCancel: () -> Unit,
+    private val hasSavedArea: Boolean = false,
+    private val onPickArea: (() -> Unit)? = null,
+    private val onRemoveArea: (() -> Unit)? = null
 ) {
     private val wm: WindowManager = context.getSystemService(WindowManager::class.java)
     private var view: SelectionView? = null
@@ -55,6 +58,15 @@ class SelectionOverlay(
             view = null
             onCancel()
         }
+    }
+
+    /** Removes the overlay but keeps the screenshot alive (it is handed to the area picker). */
+    fun detach(): Bitmap {
+        view?.let {
+            try { wm.removeViewImmediate(it) } catch (_: Throwable) {}
+        }
+        view = null
+        return screenshot
     }
 
     fun dismiss() {
@@ -102,6 +114,9 @@ class SelectionOverlay(
         private val path = Path()
         private val pillRect = RectF()
         private val closeRect = RectF()
+        private val setAreaRect = RectF()
+        private val removeAreaRect = RectF()
+        private var pillDown = 0 // 1 = set area, 2 = remove area
 
         private val statusBar: Int = run {
             val id = resources.getIdentifier("status_bar_height", "dimen", "android")
@@ -173,7 +188,44 @@ class SelectionOverlay(
 
             if (searching) {
                 drawPill(canvas, "Searching with Lens…", width / 2f, height - dp(120f))
+            } else if (path.isEmpty && !done && onPickArea != null) {
+                drawAreaPills(canvas)
             }
+        }
+
+        private fun drawAreaPills(c: Canvas) {
+            val setText = "Save search area"
+            val removeText = "Remove area"
+            val padH = dp(18f)
+            val gap = dp(10f)
+            val h = dp(38f)
+            val setW = textPaint.measureText(setText) + padH * 2
+            val remW = if (hasSavedArea && onRemoveArea != null) textPaint.measureText(removeText) + padH * 2 else 0f
+            val total = setW + if (remW > 0f) gap + remW else 0f
+            val cy = height - dp(96f)
+            var x = (width - total) / 2f
+            setAreaRect.set(x, cy - h / 2, x + setW, cy + h / 2)
+            drawPillRect(c, setAreaRect, setText)
+            if (remW > 0f) {
+                x += setW + gap
+                removeAreaRect.set(x, cy - h / 2, x + remW, cy + h / 2)
+                drawPillRect(c, removeAreaRect, removeText)
+            } else {
+                removeAreaRect.setEmpty()
+            }
+        }
+
+        private fun drawPillRect(c: Canvas, r: RectF, text: String) {
+            c.drawRoundRect(r, r.height() / 2, r.height() / 2, pillPaint)
+            val fm = textPaint.fontMetrics
+            c.drawText(text, r.centerX(), r.centerY() - (fm.ascent + fm.descent) / 2, textPaint)
+        }
+
+        private fun pillAt(x: Float, y: Float): Int {
+            if (onPickArea == null || !path.isEmpty) return 0
+            if (setAreaRect.contains(x, y)) return 1
+            if (hasSavedArea && onRemoveArea != null && removeAreaRect.contains(x, y)) return 2
+            return 0
         }
 
         private fun drawPill(c: Canvas, text: String, cx: Float, cy: Float) {
@@ -201,8 +253,28 @@ class SelectionOverlay(
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
             if (searching || done) return true
+            if (pillDown != 0) {
+                // A press that began on one of the area pills never starts a lasso.
+                if (e.actionMasked == MotionEvent.ACTION_UP) {
+                    val hit = pillAt(e.x, e.y)
+                    val pressed = pillDown
+                    pillDown = 0
+                    if (hit == pressed) {
+                        done = true
+                        if (pressed == 1) onPickArea?.invoke() else onRemoveArea?.invoke()
+                    }
+                } else if (e.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    pillDown = 0
+                }
+                return true
+            }
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    val pill = pillAt(e.x, e.y)
+                    if (pill != 0) {
+                        pillDown = pill
+                        return true
+                    }
                     if (closeRect.contains(e.x, e.y)) {
                         closing = true
                         return true

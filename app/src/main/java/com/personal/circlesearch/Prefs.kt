@@ -2,6 +2,7 @@ package com.personal.circlesearch
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.RectF
 
 /** Thin typed wrapper over SharedPreferences. Shared by the settings screen and the service. */
 class Prefs private constructor(private val sp: SharedPreferences) {
@@ -56,6 +57,41 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getFloat(K_STRIP_ALPHA, 0.6f).coerceIn(0f, 1f)
         set(value) { sp.edit().putFloat(K_STRIP_ALPHA, value.coerceIn(0f, 1f)).apply() }
 
+    /**
+     * Saved search area (fractions of the screen, 0..1). When set, a tap on the edge handle searches
+     * this area directly instead of opening the lasso. Orientation is remembered so a portrait area
+     * is never applied to a landscape screen.
+     */
+    val hasSavedArea: Boolean
+        get() = sp.getBoolean(K_AREA_SET, false)
+
+    val areaLandscape: Boolean
+        get() = sp.getBoolean(K_AREA_LAND, false)
+
+    fun savedArea(): RectF? {
+        if (!hasSavedArea) return null
+        val r = RectF(
+            sp.getFloat(K_AREA_L, 0f), sp.getFloat(K_AREA_T, 0f),
+            sp.getFloat(K_AREA_R, 0f), sp.getFloat(K_AREA_B, 0f)
+        )
+        return if (r.right > r.left && r.bottom > r.top) r else null
+    }
+
+    fun saveArea(fractions: RectF, landscape: Boolean) {
+        sp.edit()
+            .putFloat(K_AREA_L, fractions.left.coerceIn(0f, 1f))
+            .putFloat(K_AREA_T, fractions.top.coerceIn(0f, 1f))
+            .putFloat(K_AREA_R, fractions.right.coerceIn(0f, 1f))
+            .putFloat(K_AREA_B, fractions.bottom.coerceIn(0f, 1f))
+            .putBoolean(K_AREA_LAND, landscape)
+            .putBoolean(K_AREA_SET, true)
+            .apply()
+    }
+
+    fun clearArea() {
+        sp.edit().putBoolean(K_AREA_SET, false).apply()
+    }
+
     fun register(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         sp.registerOnSharedPreferenceChangeListener(listener)
     }
@@ -69,6 +105,12 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         const val WEB_WINDOW = 1
 
         private const val FILE = "circle_search_prefs"
+        private const val K_AREA_SET = "saved_area_set"
+        private const val K_AREA_L = "saved_area_l"
+        private const val K_AREA_T = "saved_area_t"
+        private const val K_AREA_R = "saved_area_r"
+        private const val K_AREA_B = "saved_area_b"
+        private const val K_AREA_LAND = "saved_area_landscape"
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"

@@ -36,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnBattery: MaterialButton
     private lateinit var btnNotif: MaterialButton
 
+    private lateinit var textAreaStatus: TextView
+    private lateinit var btnRemoveArea: MaterialButton
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -123,6 +126,26 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        textAreaStatus = findViewById(R.id.textAreaStatus)
+        btnRemoveArea = findViewById(R.id.btnRemoveArea)
+        val btnSetArea: MaterialButton = findViewById(R.id.btnSetArea)
+        btnSetArea.setOnClickListener {
+            if (CircleAccessibilityService.instance == null) {
+                Toast.makeText(this, "Turn on the Circle Search accessibility service first", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Go to the screen you want. The area picker opens in 5 seconds.", Toast.LENGTH_LONG).show()
+                moveTaskToBack(true)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    CircleAccessibilityService.instance?.startAreaPick()
+                }, 5000)
+            }
+        }
+        btnRemoveArea.setOnClickListener {
+            prefs.clearArea()
+            updateAreaStatus()
+            Toast.makeText(this, "Saved area removed", Toast.LENGTH_SHORT).show()
+        }
+
         btnTry.setOnClickListener {
             if (CircleAccessibilityService.instance == null) {
                 Toast.makeText(this, "Turn on the Circle Search accessibility service first", Toast.LENGTH_LONG).show()
@@ -139,6 +162,21 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateStatus()
         updateBackgroundStatus()
+        updateAreaStatus()
+    }
+
+    private fun updateAreaStatus() {
+        val a = prefs.savedArea()
+        if (a == null) {
+            textAreaStatus.text = "No area saved - the handle opens the lasso."
+            btnRemoveArea.visibility = android.view.View.GONE
+        } else {
+            val w = ((a.right - a.left) * 100f).roundToInt()
+            val h = ((a.bottom - a.top) * 100f).roundToInt()
+            val orient = if (prefs.areaLandscape) "landscape" else "portrait"
+            textAreaStatus.text = "Area saved ($w% x $h% of the $orient screen) - the handle searches it."
+            btnRemoveArea.visibility = android.view.View.VISIBLE
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

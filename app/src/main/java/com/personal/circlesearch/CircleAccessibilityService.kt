@@ -39,8 +39,13 @@ class CircleAccessibilityService : AccessibilityService() {
     private var strip: GestureStrip? = null
     private var selection: SelectionOverlay? = null
     private var lensWindow: FloatingLensWindow? = null
+    private var picker: AreaPickerOverlay? = null
 
     private var busy = false
+
+    private enum class Mode { LASSO, AREA_SEARCH, AREA_PICK }
+
+    private var mode = Mode.LASSO
 
     private val watchdog = Runnable {
         if (busy && selection == null) fail("Screen capture timed out")
@@ -57,7 +62,7 @@ class CircleAccessibilityService : AccessibilityService() {
         prefs = Prefs.get(this)
         io = Executors.newSingleThreadExecutor()
         bubble = BubbleOverlay(this, prefs) { startSelection() }
-        strip = GestureStrip(this, prefs) { startSelection() }
+        strip = GestureStrip(this, prefs) { onHandleTap() }
         prefs.register(prefListener)
         applyPrefs()
     }
@@ -92,6 +97,8 @@ class CircleAccessibilityService : AccessibilityService() {
         }
         selection?.dismiss()
         selection = null
+        picker?.dismiss()
+        picker = null
         lensWindow?.dismiss()
         lensWindow = null
         bubble?.hide()
@@ -154,9 +161,38 @@ class CircleAccessibilityService : AccessibilityService() {
     }
 
     /** Entry point for the bubble tap, the two-finger gesture and the "Try it now" button. */
-    fun startSelection() {
+    fun startSelection() = begin(Mode.LASSO)
+
+    /**
+     * Edge handle tap: searches the saved area straight away when one is saved (and matches the
+     * current orientation); otherwise behaves exactly like before and opens the lasso.
+     */
+    fun onHandleTap() {
+        if (busy || !prefs.serviceActive) return
+        if (prefs.savedArea() == null) {
+            begin(Mode.LASSO)
+            return
+        }
+        if (prefs.areaLandscape != isLandscape()) {
+            Toast.makeText(this, "Saved area is for the other orientation - using lasso", Toast.LENGTH_SHORT).show()
+            begin(Mode.LASSO)
+            return
+        }
+        begin(Mode.AREA_SEARCH)
+    }
+
+    /** Freezes the screen and lets the user drag out the area to save. */
+    fun startAreaPick() = begin(Mode.AREA_PICK)
+
+    private fun isLandscape(): Boolean {
+        val b = getSystemService(WindowManager::class.java).screenBounds()
+        return b.width() > b.height()
+    }
+
+    private fun begin(newMode: Mode) {
         if (busy || !prefs.serviceActive) return
         busy = true
+        mode = newMode
         lensWindow?.dismiss()
         bubble?.setSuppressed(true)
         strip?.hide()
@@ -211,14 +247,89 @@ class CircleAccessibilityService : AccessibilityService() {
             return
         }
         main.removeCallbacks(watchdog)
-        val sel = SelectionOverlay(
+        when (mode) {
+            Mode.AREA_SEARCH -> searchSavedArea(bitmap)
+            Mode.AREA_PICK -> showPicker(bitmap)
+            Mode.LASSO -> {
+                val sel = SelectionOverlay(
+                    this,
+                    bitmap,
+                    onSelected = { crop -> onCropSelected(crop) },
+                    onCancel = { finishSession() },
+                    hasSavedArea = prefs.hasSavedArea,
+                    onPickArea = { main.post { switchToPicker() } },
+                    onRemoveArea = {
+                        main.post {
+                            prefs.clearArea()
+                            Toast.makeText(this, "Saved area removed", Toast.LENGTH_SHORT).show()
+                            finishSession()
+                        }
+                    }
+                )
+                selection = sel
+                sel.show()
+            }
+        }
+    }
+
+    private fun searchSavedArea(bitmap: Bitmap) {
+        val a = prefs.savedArea()
+        val crop: Bitmap? = if (a == null) null else try {
+            val w = bitmap.width
+            val h = bitmap.height
+            val l = (a.left * w).toInt().coerceIn(0, w - 1)
+            val t = (a.top * h).toInt().coerceIn(0, h - 1)
+            val r = (a.right * w).toInt().coerceIn(l + 1, w)
+            val b = (a.bottom * h).toInt().coerceIn(t + 1, h)
+            val c = Bitmap.createBitmap(bitmap, l, t, r - l, b - t)
+            if (c !== bitmap) bitmap.recycle()
+            c
+        } catch (_: Throwable) {
+            null
+        }
+        if (crop == null) {
+            if (!bitmap.isRecycled) bitmap.recycle()
+            fail("Couldn't crop the saved area")
+        } else {
+            onCropSelected(crop)
+        }
+    }
+
+    /** From the lasso screen: reuse the same frozen screenshot for the area picker. */
+    private fun switchToPicker() {
+        val sel = selection ?: return
+        if (!busy) return
+        val bmp = sel.detach()
+        selection = null
+        mode = Mode.AREA_PICK
+        showPicker(bmp)
+    }
+
+    private fun showPicker(bitmap: Bitmap) {
+        val existing = if (prefs.areaLandscape == isLandscape()) prefs.savedArea() else null
+        val p = AreaPickerOverlay(
             this,
             bitmap,
-            onSelected = { crop -> onCropSelected(crop) },
-            onCancel = { finishSession() }
+            initial = existing,
+            hasSaved = prefs.hasSavedArea,
+            onSave = { fractions ->
+                main.post {
+                    prefs.saveArea(fractions, isLandscape())
+                    Toast.makeText(this, "Search area saved - tap the edge handle to search it", Toast.LENGTH_SHORT).show()
+                    finishSession()
+                }
+            },
+            onRemove = {
+                main.post {
+                    prefs.clearArea()
+                    Toast.makeText(this, "Saved area removed", Toast.LENGTH_SHORT).show()
+                    finishSession()
+                }
+            },
+            onCancel = { main.post { finishSession() } }
         )
-        selection = sel
-        sel.show()
+        picker = p
+        p.show()
     }
 
     private fun onCropSelected(crop: Bitmap) {
@@ -289,6 +400,10 @@ class CircleAccessibilityService : AccessibilityService() {
         val sel = selection
         selection = null
         sel?.dismiss()
+        val pk = picker
+        picker = null
+        pk?.dismiss()
+        mode = Mode.LASSO
         busy = false
         applyPrefs()
     }

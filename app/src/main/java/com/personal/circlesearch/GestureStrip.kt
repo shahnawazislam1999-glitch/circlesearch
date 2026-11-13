@@ -15,7 +15,8 @@ import android.view.WindowManager
 import kotlin.math.abs
 
 /**
- * A small, faint edge handle. Tap it once (one finger) to start Circle Search.
+ * A small, faint edge handle. Tap it once (one finger) to start Circle Search
+ * (or to search the saved area, if one is saved).
  * Press, hold and drag it to move it anywhere along the left or right edge; it snaps to the
  * nearest edge when released and remembers its position.
  */
