@@ -13,6 +13,9 @@
     <!-- Persistent notification shown by the foreground service (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Optional: lets the Lens app open reliably when the search is started with nothing on screen -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Lets the user exempt the app from battery optimisation so it is never killed -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 

@@ -17,7 +17,11 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import android.graphics.Color
+import android.graphics.PixelFormat
 import android.view.Display
+import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
@@ -40,6 +44,10 @@ class CircleAccessibilityService : AccessibilityService() {
     private var selection: SelectionOverlay? = null
     private var lensWindow: FloatingLensWindow? = null
     private var picker: AreaPickerOverlay? = null
+<<<<<<< HEAD
+=======
+    private var anchor: View? = null
+>>>>>>> b1f1190 (Initial commit)
 
     private var busy = false
 
@@ -99,6 +107,10 @@ class CircleAccessibilityService : AccessibilityService() {
         selection = null
         picker?.dismiss()
         picker = null
+<<<<<<< HEAD
+=======
+        removeAnchor()
+>>>>>>> b1f1190 (Initial commit)
         lensWindow?.dismiss()
         lensWindow = null
         bubble?.hide()
@@ -174,7 +186,10 @@ class CircleAccessibilityService : AccessibilityService() {
             return
         }
         if (prefs.areaLandscape != isLandscape()) {
+<<<<<<< HEAD
             Toast.makeText(this, "Saved area is for the other orientation - using lasso", Toast.LENGTH_SHORT).show()
+=======
+>>>>>>> b1f1190 (Initial commit)
             begin(Mode.LASSO)
             return
         }
@@ -247,6 +262,13 @@ class CircleAccessibilityService : AccessibilityService() {
             return
         }
         main.removeCallbacks(watchdog)
+<<<<<<< HEAD
+=======
+        // Android only lets an app start another app's activity from the background while it has a
+        // visible window. With a saved area nothing of ours is on screen (the handle is hidden for
+        // the screenshot), so keep a 1px, invisible window up until the search has been launched.
+        addAnchor()
+>>>>>>> b1f1190 (Initial commit)
         when (mode) {
             Mode.AREA_SEARCH -> searchSavedArea(bitmap)
             Mode.AREA_PICK -> showPicker(bitmap)
@@ -272,6 +294,35 @@ class CircleAccessibilityService : AccessibilityService() {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private fun addAnchor() {
+        if (anchor != null) return
+        try {
+            val v = View(this).apply { setBackgroundColor(Color.argb(2, 0, 0, 0)) }
+            val p = WindowManager.LayoutParams(
+                dpInt(2), dpInt(2),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.TOP or Gravity.START }
+            getSystemService(WindowManager::class.java).addView(v, p)
+            anchor = v
+        } catch (_: Throwable) {
+            anchor = null
+        }
+    }
+
+    private fun removeAnchor() {
+        val v = anchor ?: return
+        anchor = null
+        try { getSystemService(WindowManager::class.java).removeViewImmediate(v) } catch (_: Throwable) {}
+    }
+
+>>>>>>> b1f1190 (Initial commit)
     private fun searchSavedArea(bitmap: Bitmap) {
         val a = prefs.savedArea()
         val crop: Bitmap? = if (a == null) null else try {
@@ -315,7 +366,11 @@ class CircleAccessibilityService : AccessibilityService() {
             onSave = { fractions ->
                 main.post {
                     prefs.saveArea(fractions, isLandscape())
+<<<<<<< HEAD
                     Toast.makeText(this, "Search area saved - tap the edge handle to search it", Toast.LENGTH_SHORT).show()
+=======
+                    Toast.makeText(this, "Area saved", Toast.LENGTH_SHORT).show()
+>>>>>>> b1f1190 (Initial commit)
                     finishSession()
                 }
             },
@@ -364,9 +419,6 @@ class CircleAccessibilityService : AccessibilityService() {
             viaApp = LensLauncher.launch(this, file, floatingBounds())
         }
         if (!viaApp) {
-            if (mode == Prefs.LENS_APP) {
-                Toast.makeText(this, "Google Lens app not available - using built-in window", Toast.LENGTH_SHORT).show()
-            }
             openWebWindow(Base64.encodeToString(bytes, Base64.NO_WRAP))
         }
         main.postDelayed({ finishSession() }, if (viaApp) 450L else 120L)
@@ -391,7 +443,8 @@ class CircleAccessibilityService : AccessibilityService() {
     }
 
     private fun fail(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        // Searching a saved area is meant to be completely silent: nothing is shown on screen.
+        if (mode != Mode.AREA_SEARCH) Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         finishSession()
     }
 
@@ -403,6 +456,10 @@ class CircleAccessibilityService : AccessibilityService() {
         val pk = picker
         picker = null
         pk?.dismiss()
+<<<<<<< HEAD
+=======
+        removeAnchor()
+>>>>>>> b1f1190 (Initial commit)
         mode = Mode.LASSO
         busy = false
         applyPrefs()

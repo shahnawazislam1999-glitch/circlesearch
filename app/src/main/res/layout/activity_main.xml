@@ -152,6 +152,22 @@
                     android:layout_marginTop="6dp"
                     android:text="Allow unrestricted battery" />
 
+                <TextView
+                    android:id="@+id/textOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOverlay"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Allow display over other apps" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnNotif"
                     style="@style/Widget.Material3.Button.TextButton"

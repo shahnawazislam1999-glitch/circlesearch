@@ -35,6 +35,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattery: TextView
     private lateinit var btnBattery: MaterialButton
     private lateinit var btnNotif: MaterialButton
+    private lateinit var textOverlay: TextView
+    private lateinit var btnOverlay: MaterialButton
+
+    private lateinit var textAreaStatus: TextView
+    private lateinit var btnRemoveArea: MaterialButton
 
     private lateinit var textAreaStatus: TextView
     private lateinit var btnRemoveArea: MaterialButton
@@ -56,6 +61,17 @@ class MainActivity : AppCompatActivity() {
         btnNotif = findViewById(R.id.btnNotif)
         switchActive.isChecked = prefs.serviceActive
         switchActive.setOnCheckedChangeListener { _, checked -> prefs.serviceActive = checked }
+        textOverlay = findViewById(R.id.textOverlay)
+        btnOverlay = findViewById(R.id.btnOverlay)
+        btnOverlay.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (_: Throwable) {
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                )
+            }
+        }
         btnBattery.setOnClickListener { requestBatteryExemption() }
         btnNotif.setOnClickListener {
             if (Build.VERSION.SDK_INT >= 33) {
@@ -212,6 +228,10 @@ class MainActivity : AppCompatActivity() {
         textBattery.text = if (ok) "Battery: unrestricted - Android won't stop the app."
         else "Battery: restricted - Android may kill the app. Tap below to fix."
         btnBattery.visibility = if (ok) android.view.View.GONE else android.view.View.VISIBLE
+        val overlayOk = Settings.canDrawOverlays(this)
+        textOverlay.text = if (overlayOk) "Display over other apps: allowed - Lens always opens from the edge handle."
+        else "Display over other apps: off. Allow it if Lens doesn't open when you tap the edge handle with a saved area."
+        btnOverlay.visibility = if (overlayOk) android.view.View.GONE else android.view.View.VISIBLE
         btnNotif.visibility = if (notificationsGranted()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
