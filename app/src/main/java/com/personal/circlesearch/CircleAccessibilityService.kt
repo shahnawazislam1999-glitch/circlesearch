@@ -415,10 +415,23 @@ class CircleAccessibilityService : AccessibilityService() {
         val wm = getSystemService(WindowManager::class.java)
         val b = wm.screenBounds()
         val ins = wm.systemBarInsets()
+        val bottom = b.height() - ins.bottom - dpInt(12)
+
+        if (b.width() > b.height()) {
+            // LANDSCAPE: a wide, short window (94% x 62%) makes the system drop the Lens app to
+            // full screen, because Lens wants a portrait-shaped window. So in landscape we ask
+            // for a portrait-shaped floating window (same shape as in portrait), centered.
+            val top = ins.top + dpInt(12)
+            val h = ((bottom - top) * 0.92f).toInt()
+            val w = (h * 0.62f).toInt().coerceAtMost((b.width() * 0.6f).toInt())
+            val left = (b.width() - w) / 2
+            return Rect(left, bottom - h, left + w, bottom)
+        }
+
+        // PORTRAIT: unchanged (works as before).
         val w = (b.width() * 0.94f).toInt()
         val h = (b.height() * 0.62f).toInt()
         val left = (b.width() - w) / 2
-        val bottom = b.height() - ins.bottom - dpInt(12)
         return Rect(left, bottom - h, left + w, bottom)
     }
 
