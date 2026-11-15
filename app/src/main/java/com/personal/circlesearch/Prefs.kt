@@ -34,6 +34,20 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getInt(K_MODE, LENS_APP)
         set(value) { sp.edit().putInt(K_MODE, value).apply() }
 
+    /** PROMPT_SEARCH: text sent together with the picture on every search. */
+    var promptText: String
+        get() = sp.getString(K_PROMPT_TEXT, "") ?: ""
+        set(value) { sp.edit().putString(K_PROMPT_TEXT, value).apply() }
+
+    /** PROMPT_SEARCH: when off, only the picture is searched (the saved text is kept). */
+    var promptEnabled: Boolean
+        get() = sp.getBoolean(K_PROMPT_ON, true)
+        set(value) { sp.edit().putBoolean(K_PROMPT_ON, value).apply() }
+
+    /** PROMPT_SEARCH: the text to send with this search, or null for a picture-only search. */
+    fun activePrompt(): String? =
+        if (promptEnabled) promptText.trim().takeIf { it.isNotEmpty() } else null
+
     var bubbleOnRight: Boolean
         get() = sp.getBoolean(K_RIGHT, true)
         set(value) { sp.edit().putBoolean(K_RIGHT, value).apply() }
@@ -111,6 +125,8 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_AREA_R = "saved_area_r"
         private const val K_AREA_B = "saved_area_b"
         private const val K_AREA_LAND = "saved_area_landscape"
+        private const val K_PROMPT_TEXT = "prompt_text"
+        private const val K_PROMPT_ON = "prompt_enabled"
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"

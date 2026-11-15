@@ -24,7 +24,7 @@ object LensLauncher {
     )
 
     @Suppress("DEPRECATION")
-    fun launch(context: Context, imageFile: File, bounds: Rect): Boolean {
+    fun launch(context: Context, imageFile: File, bounds: Rect, prompt: String? = null): Boolean {
         val uri = try {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile)
         } catch (_: Exception) {
@@ -45,6 +45,11 @@ object LensLauncher {
                 type = "image/jpeg"
                 setClassName(pkg, chosen.activityInfo.name)
                 putExtra(Intent.EXTRA_STREAM, uri)
+                // PROMPT_SEARCH: send the typed prompt along with the picture.
+                if (prompt != null) {
+                    putExtra(Intent.EXTRA_TEXT, prompt)
+                    putExtra(Intent.EXTRA_SUBJECT, prompt)
+                }
                 clipData = ClipData.newRawUri("image", uri)
                 addFlags(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or

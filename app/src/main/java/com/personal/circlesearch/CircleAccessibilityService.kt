@@ -395,20 +395,32 @@ class CircleAccessibilityService : AccessibilityService() {
     private fun deliver(bytes: ByteArray, file: File?, mode: Int) {
         if (!busy) return
         var viaApp = false
+        // PROMPT_SEARCH: null when the switch is off or the box is empty -> picture only.
+        val prompt = prefs.activePrompt()
+        if (prompt != null) copyPromptToClipboard(prompt)
         if (mode == Prefs.LENS_APP && file != null) {
-            viaApp = LensLauncher.launch(this, file, floatingBounds())
+            viaApp = LensLauncher.launch(this, file, floatingBounds(), prompt)
         }
         if (!viaApp) {
-            openWebWindow(Base64.encodeToString(bytes, Base64.NO_WRAP))
+            openWebWindow(Base64.encodeToString(bytes, Base64.NO_WRAP), prompt)
         }
         main.postDelayed({ finishSession() }, if (viaApp) 450L else 120L)
     }
 
-    private fun openWebWindow(base64: String) {
+    private fun openWebWindow(base64: String, prompt: String? = null) {
         lensWindow?.dismiss()
         val w = FloatingLensWindow(this) { lensWindow = null }
         lensWindow = w
-        w.showWithImage(base64)
+        w.showWithImage(base64, prompt)
+    }
+
+    /** PROMPT_SEARCH: backup so the prompt can always be pasted if Lens ignores the text. */
+    private fun copyPromptToClipboard(prompt: String) {
+        try {
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Circle Search prompt", prompt))
+        } catch (_: Throwable) {
+        }
     }
 
     private fun floatingBounds(): Rect {

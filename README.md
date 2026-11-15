@@ -34,3 +34,6 @@ The accessibility service runs as a foreground service (silent notification) whi
 "Circle Search on" switch in the main screen is on. Use "Allow unrestricted battery" there so
 Android doesn't kill it. On some phones (Xiaomi, Oppo, Vivo, Samsung) also enable Autostart /
 "Don't optimize" / lock the app in Recents.
+
+## Prompt search
+In the main app, "Search with prompt" holds a text prompt that is sent together with the cropped picture on every search. Switch it off and only the picture is searched (the text stays saved). Code anchors: search for `PROMPT_SEARCH`.

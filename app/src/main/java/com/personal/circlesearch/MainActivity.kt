@@ -11,6 +11,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
+import android.widget.EditText
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
@@ -51,6 +54,29 @@ class MainActivity : AppCompatActivity() {
         statusBody = findViewById(R.id.statusBody)
         btnEnable = findViewById(R.id.btnEnable)
         btnAppInfo = findViewById(R.id.btnAppInfo)
+
+        // PROMPT_SEARCH: prompt box + on/off switch (off = picture-only search, text is kept).
+        val switchPrompt: MaterialSwitch = findViewById(R.id.switchPrompt)
+        val editPrompt: EditText = findViewById(R.id.editPrompt)
+        val textPromptHint: TextView = findViewById(R.id.textPromptHint)
+        fun refreshPromptHint() {
+            val on = prefs.promptEnabled
+            textPromptHint.text = if (on) "ON: this text is searched together with the picture every time."
+            else "OFF: only the picture is searched. Your text stays saved."
+            editPrompt.alpha = if (on) 1f else 0.5f
+        }
+        editPrompt.setText(prefs.promptText)
+        switchPrompt.isChecked = prefs.promptEnabled
+        refreshPromptHint()
+        editPrompt.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { prefs.promptText = s?.toString() ?: "" }
+        })
+        switchPrompt.setOnCheckedChangeListener { _, checked ->
+            prefs.promptEnabled = checked
+            refreshPromptHint()
+        }
 
         val switchActive: MaterialSwitch = findViewById(R.id.switchActive)
         textBattery = findViewById(R.id.textBattery)

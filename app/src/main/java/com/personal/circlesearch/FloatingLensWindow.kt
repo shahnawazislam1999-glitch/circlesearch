@@ -43,10 +43,14 @@ class FloatingLensWindow(
     private var progress: ProgressBar? = null
     private var lp: WindowManager.LayoutParams? = null
     private var finishedLoads = 0
+    private var promptText: String? = null // PROMPT_SEARCH
+    private var promptApplied = false
 
     val isShown: Boolean get() = root != null
 
-    fun showWithImage(jpegBase64: String) {
+    fun showWithImage(jpegBase64: String, prompt: String? = null) {
+        promptText = prompt
+        promptApplied = false
         if (root == null && !build()) {
             Toast.makeText(context, "Could not open the Lens window", Toast.LENGTH_LONG).show()
             onClosed()
@@ -188,7 +192,21 @@ class FloatingLensWindow(
             wv.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val scheme = request.url.scheme
-                    return !(scheme == "http" || scheme == "https")
+                    if (!(scheme == "http" || scheme == "https")) return true
+                    // PROMPT_SEARCH: once Lens redirects to its results page, add the typed text
+                    // as the query (Google "multisearch": picture + text). Done once only.
+                    val q = promptText
+                    val u = request.url
+                    if (q != null && !promptApplied && request.isForMainFrame &&
+                        (u.host ?: "").contains("google.") &&
+                        u.getQueryParameter("q").isNullOrEmpty() &&
+                        (u.path ?: "").startsWith("/search")
+                    ) {
+                        promptApplied = true
+                        view.loadUrl(u.buildUpon().appendQueryParameter("q", q).build().toString())
+                        return true
+                    }
+                    return false
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
@@ -300,12 +318,14 @@ class FloatingLensWindow(
     private fun buildHtml(b64: String): String {
         val lang = Locale.getDefault().language.ifBlank { "en" }
         val ts = System.currentTimeMillis()
+        // PROMPT_SEARCH: also pass the text on the upload address (ignored if unsupported).
+        val qParam = promptText?.let { "&amp;q=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""
         return """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>html,body{height:100%;margin:0;background:#202124;color:#e8eaed;font-family:sans-serif}
 body{display:flex;align-items:center;justify-content:center;font-size:15px}</style></head>
 <body>Searching with Google Lens&hellip;
-<form id="f" method="POST" enctype="multipart/form-data" action="https://lens.google.com/v3/upload?hl=$lang&amp;re=df&amp;st=$ts&amp;ep=gisbubb">
+<form id="f" method="POST" enctype="multipart/form-data" action="https://lens.google.com/v3/upload?hl=$lang&amp;re=df&amp;st=$ts&amp;ep=gisbubb$qParam">
 <input type="file" id="i" name="encoded_image" style="display:none">
 </form>
 <script>
