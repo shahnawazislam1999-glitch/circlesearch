@@ -401,6 +401,10 @@ class CircleAccessibilityService : AccessibilityService() {
         if (mode == Prefs.LENS_APP && file != null) {
             viaApp = LensLauncher.launch(this, file, floatingBounds(), prompt)
         }
+        if (viaApp && prompt != null) {
+            // PROMPT_SEARCH: type the prompt into Lens' "Ask about this image" box.
+            PromptFiller(this, main).run(prompt)
+        }
         if (!viaApp) {
             openWebWindow(Base64.encodeToString(bytes, Base64.NO_WRAP), prompt)
         }

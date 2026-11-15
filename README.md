@@ -36,4 +36,4 @@ Android doesn't kill it. On some phones (Xiaomi, Oppo, Vivo, Samsung) also enabl
 "Don't optimize" / lock the app in Recents.
 
 ## Prompt search
-In the main app, "Search with prompt" holds a text prompt that is sent together with the cropped picture on every search. Switch it off and only the picture is searched (the text stays saved). Code anchors: search for `PROMPT_SEARCH`.
+In the main app, "Search with prompt" holds a text prompt sent together with the cropped picture on every search. Switch it off and only the picture is searched (the text stays saved). Lens app mode: PromptFiller.kt types it into the "Ask about this image" box via accessibility (turn the accessibility service off and on once after updating). Built-in window: added as q= on the results URL. Code anchors: search for `PROMPT_SEARCH`.

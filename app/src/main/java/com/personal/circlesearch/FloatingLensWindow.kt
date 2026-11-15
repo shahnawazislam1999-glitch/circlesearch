@@ -66,6 +66,27 @@ class FloatingLensWindow(
         )
     }
 
+    /**
+     * PROMPT_SEARCH: Lens' results page is a google.com/search URL carrying vsrid=... and an empty
+     * q=. Setting q makes Google run picture + text together. Applied once per search.
+     */
+    private fun applyPrompt(view: WebView, url: String): Boolean {
+        val q = promptText ?: return false
+        if (promptApplied) return false
+        val u = android.net.Uri.parse(url)
+        if (!(u.host ?: "").contains("google.")) return false
+        if (u.getQueryParameter("vsrid") == null) return false
+        promptApplied = true
+        val b = u.buildUpon().clearQuery()
+        for (name in u.queryParameterNames) {
+            if (name == "q") continue
+            for (v in u.getQueryParameters(name)) b.appendQueryParameter(name, v)
+        }
+        b.appendQueryParameter("q", q)
+        view.post { view.loadUrl(b.build().toString()) }
+        return true
+    }
+
     fun dismiss() {
         val r = root ?: return
         root = null
@@ -193,20 +214,12 @@ class FloatingLensWindow(
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val scheme = request.url.scheme
                     if (!(scheme == "http" || scheme == "https")) return true
-                    // PROMPT_SEARCH: once Lens redirects to its results page, add the typed text
-                    // as the query (Google "multisearch": picture + text). Done once only.
-                    val q = promptText
-                    val u = request.url
-                    if (q != null && !promptApplied && request.isForMainFrame &&
-                        (u.host ?: "").contains("google.") &&
-                        u.getQueryParameter("q").isNullOrEmpty() &&
-                        (u.path ?: "").startsWith("/search")
-                    ) {
-                        promptApplied = true
-                        view.loadUrl(u.buildUpon().appendQueryParameter("q", q).build().toString())
-                        return true
-                    }
-                    return false
+                    // PROMPT_SEARCH: add the typed text to the Lens results page.
+                    return applyPrompt(view, request.url.toString())
+                }
+
+                override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    if (url != null) applyPrompt(view, url)
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
@@ -318,14 +331,12 @@ class FloatingLensWindow(
     private fun buildHtml(b64: String): String {
         val lang = Locale.getDefault().language.ifBlank { "en" }
         val ts = System.currentTimeMillis()
-        // PROMPT_SEARCH: also pass the text on the upload address (ignored if unsupported).
-        val qParam = promptText?.let { "&amp;q=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""
         return """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>html,body{height:100%;margin:0;background:#202124;color:#e8eaed;font-family:sans-serif}
 body{display:flex;align-items:center;justify-content:center;font-size:15px}</style></head>
 <body>Searching with Google Lens&hellip;
-<form id="f" method="POST" enctype="multipart/form-data" action="https://lens.google.com/v3/upload?hl=$lang&amp;re=df&amp;st=$ts&amp;ep=gisbubb$qParam">
+<form id="f" method="POST" enctype="multipart/form-data" action="https://lens.google.com/v3/upload?hl=$lang&amp;re=df&amp;st=$ts&amp;ep=gisbubb">
 <input type="file" id="i" name="encoded_image" style="display:none">
 </form>
 <script>
