@@ -67,7 +67,7 @@ object LensLauncher {
         return false
     }
 
-    private fun start(context: Context, intent: Intent, bounds: Rect): Boolean {
+    internal fun start(context: Context, intent: Intent, bounds: Rect): Boolean {
         val base: Bundle = ActivityOptions.makeBasic().setLaunchBounds(bounds).toBundle() ?: Bundle()
         // Best effort: ask for a freeform window. Ignored by the system when unsupported.
         val freeform = Bundle(base).apply { putInt("android.activity.windowingMode", 5) }

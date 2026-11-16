@@ -67,7 +67,7 @@ class CircleAccessibilityService : AccessibilityService() {
         prefs = Prefs.get(this)
         io = Executors.newSingleThreadExecutor()
         bubble = BubbleOverlay(this, prefs) { startSelection() }
-        strip = GestureStrip(this, prefs) { onHandleTap() }
+        strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) })
         prefs.register(prefListener)
         applyPrefs()
     }
@@ -155,6 +155,8 @@ class CircleAccessibilityService : AccessibilityService() {
 
     private fun applyPrefs() {
         ensureForeground(prefs.serviceActive)
+        // Uninstalled apps lose their handle automatically.
+        prefs.pruneUninstalled(packageManager)
         if (busy) return
         if (!prefs.serviceActive) {
             bubble?.hide()
@@ -184,6 +186,20 @@ class CircleAccessibilityService : AccessibilityService() {
             return
         }
         begin(Mode.AREA_SEARCH)
+    }
+
+    /** App-shortcut handle tap: opens that app in a floating window. */
+    fun openShortcut(shortcut: AppShortcut) {
+        if (busy || !prefs.serviceActive) return
+        if (packageManager.getLaunchIntentForPackage(shortcut.packageName) == null) {
+            // App is gone: delete its handle (the cluster updates itself through the prefs listener).
+            prefs.removeShortcut(shortcut.id)
+            Toast.makeText(this, "${shortcut.label} isn't installed - shortcut removed", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds())) {
+            Toast.makeText(this, "Couldn't open ${shortcut.label}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** Freezes the screen and lets the user drag out the area to save. */

@@ -16,7 +16,14 @@ No Gradle wrapper is needed: the workflow installs Gradle 8.9, JDK 17 and the An
 
 ## Notes
 - Everything runs as accessibility overlays, so no "draw over other apps" permission is required. Optional: allow it in the app if Lens doesn't open when you tap the handle with a saved area (it exempts the app from Android's background-launch limit). A saved-area search shows nothing on screen: no toasts, no hints.
-- Edge handle: tap the faint handle once to search; press, hold and drag to move it anywhere along either edge.
+- Edge handles: the top handle is the default one - tap it once to search. Press, hold and drag any handle to move the whole cluster anywhere along either edge.
+- App shortcuts: in the app, "Edge handles" -> **Add app shortcut** (up to 8). Pick an app, choose its handle colour
+  (pre-filled from the app icon, e.g. black for ChatGPT, green for WhatsApp) and it gets its own handle under the
+  default one. One tap opens that app in a floating window. Deleting the shortcut (or uninstalling the app) removes
+  its handle automatically; UNDO is offered. Tap a colour dot to recolour a handle at any time.
+  Handle height (24-80 dp, same for every handle) and opacity (0-100%, whole cluster) are sliders in the same card.
+  Floating app windows use Android freeform windows (Developer options -> Enable freeform windows, and
+  "Force activities to be resizable" if an app refuses). Where that is off, the app opens normally.
 - Saved search area: pick a spot once and every tap on the edge handle searches exactly that spot (no circling).
   Save it from the lasso screen ("Save search area" button, shown when you open the lasso from the bubble or
   "Try it now"), or from the app ("Saved search area" -> Set area). Drag to draw, drag inside to move, drag the

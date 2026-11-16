@@ -2,7 +2,10 @@ package com.personal.circlesearch
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.RectF
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** Thin typed wrapper over SharedPreferences. Shared by the settings screen and the service. */
 class Prefs private constructor(private val sp: SharedPreferences) {
@@ -71,6 +74,87 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getFloat(K_STRIP_ALPHA, 0.6f).coerceIn(0f, 1f)
         set(value) { sp.edit().putFloat(K_STRIP_ALPHA, value.coerceIn(0f, 1f)).apply() }
 
+    /** Height of every edge handle in dp (all handles share the same size). */
+    var handleHeightDp: Int
+        get() = sp.getInt(K_HANDLE_H, DEFAULT_HANDLE_DP).coerceIn(MIN_HANDLE_DP, MAX_HANDLE_DP)
+        set(value) { sp.edit().putInt(K_HANDLE_H, value.coerceIn(MIN_HANDLE_DP, MAX_HANDLE_DP)).apply() }
+
+    /** Colour of the default (search) handle. */
+    var searchHandleColor: Int
+        get() = sp.getInt(K_SEARCH_COLOR, DEFAULT_SEARCH_COLOR) or AppShortcut.OPAQUE
+        set(value) { sp.edit().putInt(K_SEARCH_COLOR, value or AppShortcut.OPAQUE).apply() }
+
+    /** App shortcuts, in the order they appear on the edge (below the default search handle). */
+    fun shortcuts(): List<AppShortcut> {
+        val raw = sp.getString(K_SHORTCUTS, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<AppShortcut>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                out.add(
+                    AppShortcut(
+                        o.getString("id"), o.getString("pkg"), o.getString("label"),
+                        o.getInt("color") or AppShortcut.OPAQUE
+                    )
+                )
+            }
+            out
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    fun saveShortcuts(list: List<AppShortcut>) {
+        val arr = JSONArray()
+        for (s in list) {
+            arr.put(
+                JSONObject()
+                    .put("id", s.id)
+                    .put("pkg", s.packageName)
+                    .put("label", s.label)
+                    .put("color", s.color)
+            )
+        }
+        sp.edit().putString(K_SHORTCUTS, arr.toString()).apply()
+    }
+
+    /** Returns false when the list is full or the app is already there. */
+    fun addShortcut(s: AppShortcut): Boolean {
+        val cur = shortcuts()
+        if (cur.size >= MAX_SHORTCUTS || cur.any { it.packageName == s.packageName }) return false
+        saveShortcuts(cur + s)
+        return true
+    }
+
+    fun insertShortcut(index: Int, s: AppShortcut) {
+        val cur = shortcuts().toMutableList()
+        if (cur.size >= MAX_SHORTCUTS || cur.any { it.packageName == s.packageName }) return
+        cur.add(index.coerceIn(0, cur.size), s)
+        saveShortcuts(cur)
+    }
+
+    fun removeShortcut(id: String) {
+        val cur = shortcuts()
+        val next = cur.filter { it.id != id }
+        if (next.size != cur.size) saveShortcuts(next)
+    }
+
+    fun setShortcutColor(id: String, color: Int) {
+        saveShortcuts(shortcuts().map { if (it.id == id) it.copy(color = color or AppShortcut.OPAQUE) else it })
+    }
+
+    /** Drops shortcuts whose app was uninstalled, so their handle disappears on its own. */
+    fun pruneUninstalled(pm: PackageManager): Boolean {
+        val cur = shortcuts()
+        val keep = cur.filter {
+            try { pm.getLaunchIntentForPackage(it.packageName) != null } catch (_: Throwable) { true }
+        }
+        if (keep.size == cur.size) return false
+        saveShortcuts(keep)
+        return true
+    }
+
     /**
      * Saved search area (fractions of the screen, 0..1). When set, a tap on the edge handle searches
      * this area directly instead of opening the lasso. Orientation is remembered so a portrait area
@@ -118,6 +202,12 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         const val LENS_APP = 0
         const val WEB_WINDOW = 1
 
+        const val MAX_SHORTCUTS = 8
+        const val MIN_HANDLE_DP = 24
+        const val MAX_HANDLE_DP = 80
+        const val DEFAULT_HANDLE_DP = 44
+        const val DEFAULT_SEARCH_COLOR = 0xFFF1F3F4.toInt()
+
         private const val FILE = "circle_search_prefs"
         private const val K_AREA_SET = "saved_area_set"
         private const val K_AREA_L = "saved_area_l"
@@ -131,6 +221,9 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"
         private const val K_STRIP_ALPHA = "strip_opacity"
+        private const val K_HANDLE_H = "handle_height_dp"
+        private const val K_SEARCH_COLOR = "search_handle_color"
+        private const val K_SHORTCUTS = "app_shortcuts_json"
         private const val K_BUBBLE = "bubble_enabled"
         private const val K_OPACITY = "bubble_opacity"
         private const val K_SIZE = "bubble_size_dp"

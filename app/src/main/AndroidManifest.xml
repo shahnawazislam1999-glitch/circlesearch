@@ -24,6 +24,11 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="image/*" />
         </intent>
+        <!-- Lets the app list and open the apps you add as edge-handle shortcuts -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.ar.lens" />
     </queries>
