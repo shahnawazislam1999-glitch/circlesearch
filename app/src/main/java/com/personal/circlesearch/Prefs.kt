@@ -79,6 +79,15 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getInt(K_HANDLE_H, DEFAULT_HANDLE_DP).coerceIn(MIN_HANDLE_DP, MAX_HANDLE_DP)
         set(value) { sp.edit().putInt(K_HANDLE_H, value.coerceIn(MIN_HANDLE_DP, MAX_HANDLE_DP)).apply() }
 
+    /** Clipboard (PinClip) window: when on, a clipboard handle joins the cluster, right under the search handle. */
+    var clipboardEnabled: Boolean
+        get() = sp.getBoolean(K_CLIP_ON, false)
+        set(value) { sp.edit().putBoolean(K_CLIP_ON, value).apply() }
+
+    var clipHandleColor: Int
+        get() = sp.getInt(K_CLIP_COLOR, DEFAULT_CLIP_COLOR) or AppShortcut.OPAQUE
+        set(value) { sp.edit().putInt(K_CLIP_COLOR, value or AppShortcut.OPAQUE).apply() }
+
     /** Colour of the default (search) handle. */
     var searchHandleColor: Int
         get() = sp.getInt(K_SEARCH_COLOR, DEFAULT_SEARCH_COLOR) or AppShortcut.OPAQUE
@@ -207,6 +216,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         const val MAX_HANDLE_DP = 80
         const val DEFAULT_HANDLE_DP = 44
         const val DEFAULT_SEARCH_COLOR = 0xFFF1F3F4.toInt()
+        const val DEFAULT_CLIP_COLOR = 0xFFFFB224.toInt()
 
         private const val FILE = "circle_search_prefs"
         private const val K_AREA_SET = "saved_area_set"
@@ -223,6 +233,8 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_STRIP_ALPHA = "strip_opacity"
         private const val K_HANDLE_H = "handle_height_dp"
         private const val K_SEARCH_COLOR = "search_handle_color"
+        private const val K_CLIP_ON = "clipboard_enabled"
+        private const val K_CLIP_COLOR = "clipboard_handle_color"
         private const val K_SHORTCUTS = "app_shortcuts_json"
         private const val K_BUBBLE = "bubble_enabled"
         private const val K_OPACITY = "bubble_opacity"

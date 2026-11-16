@@ -27,7 +27,12 @@ import android.widget.ListView
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.personal.circlesearch.clip.Store
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
@@ -60,6 +65,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shortcutList: LinearLayout
     private lateinit var btnAddApp: MaterialButton
     private lateinit var textShortcutCount: TextView
+
+    // Clipboard card
+    private lateinit var switchClip: MaterialSwitch
+    private lateinit var switchClipAuto: MaterialSwitch
+    private lateinit var layoutClip: View
+    private lateinit var textClipHint: TextView
+    private lateinit var textClipAuto: TextView
+    private lateinit var textClipStats: TextView
+    private var clipSuppress = false
+
+    private val backupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) writeClipBackup(uri)
+    }
+    private val restoreLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) askClipRestore(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -192,6 +213,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         switchGesture.setOnCheckedChangeListener { _, checked -> prefs.gestureStrip = checked }
+        setupClipboard(switchGesture)
 
         rgLens.setOnCheckedChangeListener { _, id ->
             prefs.lensMode = if (id == R.id.rbWebWindow) Prefs.WEB_WINDOW else Prefs.LENS_APP
@@ -245,6 +267,117 @@ class MainActivity : AppCompatActivity() {
         updateStatus()
         updateBackgroundStatus()
         updateAreaStatus()
+        refreshClipboard()
+    }
+
+    // ---------------------------------------------------------------- clipboard (PinClip window)
+
+    private fun mediaPermission() =
+        if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    private fun setupClipboard(switchGesture: MaterialSwitch) {
+        Store.init(this)
+        switchClip = findViewById(R.id.switchClip)
+        switchClipAuto = findViewById(R.id.switchClipAuto)
+        layoutClip = findViewById(R.id.layoutClip)
+        textClipHint = findViewById(R.id.textClipHint)
+        textClipAuto = findViewById(R.id.textClipAuto)
+        textClipStats = findViewById(R.id.textClipStats)
+        val slider: Slider = findViewById(R.id.sliderClipOpacity)
+        val textOpacity: TextView = findViewById(R.id.textClipOpacity)
+
+        val pct = (Store.prefs.getInt("palpha", 100).coerceIn(15, 100) / 5) * 5
+        slider.value = pct.toFloat()
+        textOpacity.text = "$pct%"
+        slider.setLabelFormatter { "${it.toInt()}%" }
+        slider.addOnChangeListener { _, value, fromUser ->
+            textOpacity.text = "${value.toInt()}%"
+            if (fromUser) Store.prefs.edit().putInt("palpha", value.toInt()).apply()
+        }
+
+        switchClip.setOnCheckedChangeListener { _, checked ->
+            if (clipSuppress) return@setOnCheckedChangeListener
+            prefs.clipboardEnabled = checked
+            if (checked && !prefs.gestureStrip) {
+                prefs.gestureStrip = true
+                switchGesture.isChecked = true
+            }
+            renderShortcuts()
+            refreshClipboard()
+        }
+        switchClipAuto.setOnCheckedChangeListener { _, checked ->
+            if (clipSuppress) return@setOnCheckedChangeListener
+            if (checked && checkSelfPermission(mediaPermission()) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(mediaPermission()), 12)
+            }
+            Store.prefs.edit().putBoolean("auto", checked).apply()
+            refreshClipboard()
+        }
+        findViewById<MaterialButton>(R.id.btnClipBackup).setOnClickListener {
+            backupLauncher.launch("CircleSearch-clipboard-" + SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date()) + ".zip")
+        }
+        findViewById<MaterialButton>(R.id.btnClipRestore).setOnClickListener {
+            restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+        }
+        refreshClipboard()
+    }
+
+    private fun refreshClipboard() {
+        if (!this::switchClip.isInitialized) return
+        clipSuppress = true
+        val on = prefs.clipboardEnabled
+        switchClip.isChecked = on
+        switchClipAuto.isChecked = Store.prefs.getBoolean("auto", false)
+        clipSuppress = false
+        layoutClip.visibility = if (on) View.VISIBLE else View.GONE
+        textClipHint.text = if (on)
+            "ON: a clipboard handle sits right under the Circle Search handle (turn on Edge handles above). Tap it to open your clipboard window, tap a card to paste it into the field you are typing in. Change the handle colour in the list under Edge handles."
+        else
+            "OFF: switch on to add a clipboard handle to the edge handles. Tapping it opens your PinClip clipboard window."
+        val photos = checkSelfPermission(mediaPermission()) == PackageManager.PERMISSION_GRANTED
+        textClipAuto.text = "Saves everything you copy as a card" +
+            if (photos) ", plus new screenshots." else ". Screenshots need photo access: switch this off and on and tap Allow."
+        textClipStats.text = "${Store.items.size} cards - ${Store.groups.size} groups - ${Store.items.count { it.pinned }} pinned"
+    }
+
+    private fun writeClipBackup(uri: Uri) {
+        val js = Store.backupJson()
+        val imgs = Store.backupImages()
+        Thread {
+            val ok = try {
+                contentResolver.openOutputStream(uri)?.use { Store.writeZip(it, js, imgs) }
+                true
+            } catch (_: Throwable) {
+                false
+            }
+            runOnUiThread {
+                Toast.makeText(this, if (ok) "Backup saved (${imgs.size} images)" else "Backup failed", Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
+    private fun askClipRestore(uri: Uri) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Restore clipboard backup")
+            .setMessage("Merge adds missing cards and keeps what you have. Replace wipes everything first. Works with PinClip backups too.")
+            .setPositiveButton("Merge") { _, _ -> runClipImport(uri, false) }
+            .setNegativeButton("Replace all") { _, _ -> runClipImport(uri, true) }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    private fun runClipImport(uri: Uri, replace: Boolean) {
+        Thread {
+            val ins = try { contentResolver.openInputStream(uri) } catch (_: Throwable) { null }
+            if (ins == null) {
+                runOnUiThread { Toast.makeText(this, "Could not open that file", Toast.LENGTH_LONG).show() }
+            } else {
+                Store.importZip(ins, replace) { n ->
+                    Toast.makeText(this, if (n >= 0) "Restored $n cards" else "Not a valid backup", Toast.LENGTH_LONG).show()
+                    refreshClipboard()
+                }
+            }
+        }.start()
     }
 
     private fun updateAreaStatus() {
@@ -264,6 +397,7 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         updateBackgroundStatus()
+        refreshClipboard()
     }
 
     private fun notificationsGranted(): Boolean =
@@ -359,15 +493,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Rebuilds the shortcut rows (default search handle first) and the live preview. */
     private fun renderShortcuts() {
+        if (!this::handlePreview.isInitialized) return
         shortcutList.removeAllViews()
         val inflater = LayoutInflater.from(this)
 
-        fun row(icon: Drawable?, label: String, sub: String, color: Int, onColor: (Int) -> Unit, onDelete: (() -> Unit)?) {
+        fun row(icon: Drawable?, label: String, sub: String, color: Int, onColor: (Int) -> Unit, onDelete: (() -> Unit)?, iconRes: Int = R.drawable.ic_search) {
             val v = inflater.inflate(R.layout.item_shortcut, shortcutList, false)
             val iconView: ImageView = v.findViewById(R.id.rowIcon)
             if (icon != null) iconView.setImageDrawable(icon)
             else {
-                iconView.setImageResource(R.drawable.ic_search)
+                iconView.setImageResource(iconRes)
                 iconView.setPadding(dpInt(8), dpInt(8), dpInt(8), dpInt(8))
                 iconView.imageTintList = ColorStateList.valueOf(
                     MaterialColors.getColor(iconView, com.google.android.material.R.attr.colorOnSurfaceVariant)
@@ -391,6 +526,12 @@ class MainActivity : AppCompatActivity() {
             null, "Circle Search", "Default handle - lasso or saved area",
             prefs.searchHandleColor, { prefs.searchHandleColor = it }, null
         )
+        if (prefs.clipboardEnabled) {
+            row(
+                null, "Clipboard", "PinClip window - tap to open",
+                prefs.clipHandleColor, { prefs.clipHandleColor = it }, null, R.drawable.clip_ic_clip
+            )
+        }
         val list = prefs.shortcuts()
         for (s in list) {
             val icon = try { packageManager.getApplicationIcon(s.packageName) } catch (_: Throwable) { null }

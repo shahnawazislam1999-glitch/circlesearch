@@ -25,6 +25,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import com.personal.circlesearch.clip.ClipboardWindow
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -43,6 +44,7 @@ class CircleAccessibilityService : AccessibilityService() {
     private var strip: GestureStrip? = null
     private var selection: SelectionOverlay? = null
     private var lensWindow: FloatingLensWindow? = null
+    private var clip: ClipboardWindow? = null
     private var picker: AreaPickerOverlay? = null
     private var anchor: View? = null
 
@@ -67,12 +69,16 @@ class CircleAccessibilityService : AccessibilityService() {
         prefs = Prefs.get(this)
         io = Executors.newSingleThreadExecutor()
         bubble = BubbleOverlay(this, prefs) { startSelection() }
-        strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) })
+        clip = ClipboardWindow(this)
+        strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) }, { openClipboard() })
         prefs.register(prefListener)
         applyPrefs()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Only used so the clipboard can notice a "Copy" press (auto-save); cheap no-op otherwise.
+        clip?.onAccessibilityEvent(event)
+    }
 
     override fun onInterrupt() = Unit
 
@@ -82,6 +88,7 @@ class CircleAccessibilityService : AccessibilityService() {
         main.post {
             bubble?.onConfigurationChanged()
             strip?.relayout()
+            clip?.onConfigChanged()
         }
     }
 
@@ -107,6 +114,8 @@ class CircleAccessibilityService : AccessibilityService() {
         removeAnchor()
         lensWindow?.dismiss()
         lensWindow = null
+        clip?.destroy()
+        clip = null
         bubble?.hide()
         strip?.hide()
         busy = false
@@ -155,6 +164,7 @@ class CircleAccessibilityService : AccessibilityService() {
 
     private fun applyPrefs() {
         ensureForeground(prefs.serviceActive)
+        clip?.active = prefs.serviceActive && prefs.clipboardEnabled && prefs.gestureStrip
         // Uninstalled apps lose their handle automatically.
         prefs.pruneUninstalled(packageManager)
         if (busy) return
@@ -166,6 +176,7 @@ class CircleAccessibilityService : AccessibilityService() {
         if (prefs.bubbleEnabled) bubble?.show() else bubble?.hide()
         if (prefs.gestureStrip) strip?.show() else strip?.hide()
         bubble?.setSuppressed(false)
+        clip?.setSuppressed(false)
     }
 
     /** Entry point for the bubble tap, the two-finger gesture and the "Try it now" button. */
@@ -186,6 +197,12 @@ class CircleAccessibilityService : AccessibilityService() {
             return
         }
         begin(Mode.AREA_SEARCH)
+    }
+
+    /** Clipboard handle tap: opens the PinClip clipboard window (tap again to close it). */
+    fun openClipboard() {
+        if (busy || !prefs.serviceActive || !prefs.clipboardEnabled) return
+        clip?.toggle()
     }
 
     /** App-shortcut handle tap: opens that app in a floating window. */
@@ -216,6 +233,7 @@ class CircleAccessibilityService : AccessibilityService() {
         mode = newMode
         lensWindow?.dismiss()
         bubble?.setSuppressed(true)
+        clip?.setSuppressed(true)
         strip?.hide()
         main.postDelayed(watchdog, 6000)
         main.postDelayed({ capture(0) }, 140)

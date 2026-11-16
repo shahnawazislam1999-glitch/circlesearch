@@ -33,10 +33,24 @@ No Gradle wrapper is needed: the workflow installs Gradle 8.9, JDK 17 and the An
   "Built-in floating Lens window" in the app.
 - The built-in window uses Google Lens' web upload endpoint, which is unofficial and could change.
 
+## Clipboard (PinClip window, built in)
+The PinClip floating clipboard now lives inside Circle Search. In the app, switch on **Clipboard**: a clipboard handle
+appears in the edge-handle cluster, right under the Circle Search handle (it turns on Edge handles for you if they were off).
+Tap it and the PinClip window opens exactly as in the PinClip app: cards, groups, search, pin, multi-select, paste-all,
+image cards, editor, drag to move, resize grip, full-screen toggle. Tap a card and it is pasted into the text field you
+are typing in; tap the handle again (or the minimise button) to close the window.
+- It is an accessibility overlay hosted by the Circle Search service, so no extra permission is needed. Pasting uses the same
+  accessibility service (it needs the field to have input focus; otherwise the text is just copied).
+- The handle colour is the "Clipboard" row under Edge handles; window opacity, auto-save of copies/screenshots and
+  Backup / Restore (also reads PinClip backup .zip files) are in the Clipboard card.
+- Circle Search hides the window for a moment while it takes its screenshot.
+- Code lives in `clip/` (`ClipboardWindow.kt` is the PinClip window, `Store.kt` its data).
+
 ## Background running & permissions
 
 Declared in `AndroidManifest.xml`: INTERNET, ACCESS_NETWORK_STATE, FOREGROUND_SERVICE,
-FOREGROUND_SERVICE_SPECIAL_USE, WAKE_LOCK, POST_NOTIFICATIONS, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS.
+FOREGROUND_SERVICE_SPECIAL_USE, WAKE_LOCK, POST_NOTIFICATIONS, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+and (only for clipboard auto-save of screenshots, asked when you turn it on) READ_MEDIA_IMAGES.
 The accessibility service runs as a foreground service (silent notification) while the
 "Circle Search on" switch in the main screen is on. Use "Allow unrestricted battery" there so
 Android doesn't kill it. On some phones (Xiaomi, Oppo, Vivo, Samsung) also enable Autostart /

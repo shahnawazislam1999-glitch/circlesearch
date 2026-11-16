@@ -21,20 +21,22 @@ import kotlin.math.abs
  * single overlay window, and move together: press, hold and drag any of them to move the whole
  * cluster along the left or right edge (it snaps to the nearest edge and remembers its position).
  *
- * Tap the default handle -> Circle Search. Tap an app handle -> that app opens in a floating window.
+ * Tap the default handle -> Circle Search. Tap the clipboard handle (when switched on) -> the PinClip clipboard
+ * window. Tap an app handle -> that app opens in a floating window.
  */
 class GestureStrip(
     private val context: Context,
     private val prefs: Prefs,
     private val onTap: () -> Unit,
-    private val onShortcut: (AppShortcut) -> Unit
+    private val onShortcut: (AppShortcut) -> Unit,
+    private val onClipboard: () -> Unit
 ) {
     private val wm: WindowManager = context.getSystemService(WindowManager::class.java)
     private var view: StripView? = null
     private var lp: WindowManager.LayoutParams? = null
 
     /** One handle: the default search handle has no shortcut. */
-    private class Item(val color: Int, val shortcut: AppShortcut?)
+    private class Item(val color: Int, val shortcut: AppShortcut?, val isClipboard: Boolean = false)
 
     fun show() {
         if (view != null) {
@@ -85,6 +87,7 @@ class GestureStrip(
     private fun buildItems(): List<Item> {
         val list = ArrayList<Item>()
         list.add(Item(prefs.searchHandleColor, null))
+        if (prefs.clipboardEnabled) list.add(Item(prefs.clipHandleColor, null, true))
         for (s in prefs.shortcuts()) list.add(Item(s.color, s))
         return list
     }
@@ -226,8 +229,13 @@ class GestureStrip(
                         invalidate()
                         if (!moved && tapped in items.indices) {
                             performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                            val shortcut = items[tapped].shortcut
-                            if (shortcut == null) onTap() else onShortcut(shortcut)
+                            val item = items[tapped]
+                            val shortcut = item.shortcut
+                            when {
+                                shortcut != null -> onShortcut(shortcut)
+                                item.isClipboard -> onClipboard()
+                                else -> onTap()
+                            }
                         }
                     }
                 }

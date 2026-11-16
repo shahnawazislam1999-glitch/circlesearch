@@ -19,6 +19,10 @@
     <!-- Lets the user exempt the app from battery optimisation so it is never killed -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Clipboard window: auto-save screenshots (optional, asked only when that switch is turned on) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.SEND" />
@@ -51,6 +55,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Clipboard window helpers (invisible screens; see clip/ package) -->
+        <activity
+            android:name=".clip.ClipReadActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
+            android:name=".clip.ImagePickActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".CircleAccessibilityService"
             android:exported="true"
@@ -76,6 +95,16 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+        </provider>
+
+        <provider
+            android:name=".clip.ClipFileProvider"
+            android:authorities="${applicationId}.clipfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/clip_file_paths" />
         </provider>
     </application>
 </manifest>

@@ -78,7 +78,7 @@ class HandlePainter(private val ctx: Context) {
     companion object {
         /** Width of the touch strip (and of its window). */
         const val WIDTH_DP = 28
-        private const val GAP_DP = 8f
+        private const val GAP_DP = 0f   // handles touch each other: no gap inside the cluster
         private const val PAD_DP = 4f
         private const val BAR_DP = 7f
         private const val INSET_DP = 3f
@@ -113,10 +113,11 @@ class HandlePreviewView @JvmOverloads constructor(
     private var opacity = 1f
 
     fun bind(prefs: Prefs) {
-        val list = IntArray(prefs.shortcuts().size + 1)
-        list[0] = prefs.searchHandleColor
-        prefs.shortcuts().forEachIndexed { i, s -> list[i + 1] = s.color }
-        colors = list
+        val list = ArrayList<Int>()
+        list.add(prefs.searchHandleColor)
+        if (prefs.clipboardEnabled) list.add(prefs.clipHandleColor)
+        prefs.shortcuts().forEach { list.add(it.color) }
+        colors = list.toIntArray()
         handlePx = context.dp(prefs.handleHeightDp.toFloat())
         onRight = prefs.stripOnRight
         // Never fully blank in the preview, so colours can still be judged at 0% opacity.
