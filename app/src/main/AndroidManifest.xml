@@ -35,6 +35,7 @@
         </intent>
         <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.google.ar.lens" />
+        <package android:name="com.openai.chatgpt" />
     </queries>
 
     <application

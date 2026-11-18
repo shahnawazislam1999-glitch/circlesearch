@@ -58,3 +58,14 @@ Android doesn't kill it. On some phones (Xiaomi, Oppo, Vivo, Samsung) also enabl
 
 ## Prompt search
 In the main app, "Search with prompt" holds a text prompt sent together with the cropped picture on every search. Switch it off and only the picture is searched (the text stays saved). Lens app mode: PromptFiller.kt types it into the "Ask about this image" box via accessibility (turn the accessibility service off and on once after updating). Built-in window: added as q= on the results URL. Code anchors: search for `PROMPT_SEARCH`.
+
+## ChatGPT search handle
+In the app, switch on **ChatGPT search**: a new thin edge handle appears right under the Circle Search handle (it turns on Edge handles for you).
+Tap it and the screenshot is shared to the real ChatGPT app together with the prompt you typed in the card.
+- **Prompt**: text box in the card (switch "Send the prompt" off to send only the picture). It is also copied to the clipboard as a backup.
+- **Auto send**: after ChatGPT opens, the accessibility service makes sure the prompt is in the message box and presses send once the image has uploaded. Switch "Press send automatically" off to review it yourself first.
+- **Set area**: the card has its own saved area (separate from the Circle Search one). With an area saved, one tap sends exactly that part of the screen; without one the lasso opens. Remove it to go back to the lasso.
+- Needs the ChatGPT app (`com.openai.chatgpt`) installed. ChatGPT can change its layout, so if auto send ever misses, the image and prompt are still in the app and a toast tells you to tap send. After updating, turn the accessibility service off and on once. Code anchors: search for `GPT_SEARCH`.
+
+## Handle look
+Handles are now a 2 dp hairline hugging the screen edge, with a small gap between handles and a faint shadow so light colours stay visible on white screens. Touch area is still 24 dp wide. Default opacity is 85%.

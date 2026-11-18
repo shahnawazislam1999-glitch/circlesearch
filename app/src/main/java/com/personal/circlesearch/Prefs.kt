@@ -51,6 +51,34 @@ class Prefs private constructor(private val sp: SharedPreferences) {
     fun activePrompt(): String? =
         if (promptEnabled) promptText.trim().takeIf { it.isNotEmpty() } else null
 
+    // ------------------------------------------------------------------ ChatGPT handle
+
+    /** GPT_SEARCH: when on, a ChatGPT edge handle joins the cluster (right under the search handle). */
+    var gptEnabled: Boolean
+        get() = sp.getBoolean(K_GPT_ON, false)
+        set(value) { sp.edit().putBoolean(K_GPT_ON, value).apply() }
+
+    var gptHandleColor: Int
+        get() = sp.getInt(K_GPT_COLOR, DEFAULT_GPT_COLOR) or AppShortcut.OPAQUE
+        set(value) { sp.edit().putInt(K_GPT_COLOR, value or AppShortcut.OPAQUE).apply() }
+
+    /** GPT_SEARCH: text sent together with the picture to the ChatGPT app. */
+    var gptPromptText: String
+        get() = sp.getString(K_GPT_PROMPT, "") ?: ""
+        set(value) { sp.edit().putString(K_GPT_PROMPT, value).apply() }
+
+    var gptPromptEnabled: Boolean
+        get() = sp.getBoolean(K_GPT_PROMPT_ON, true)
+        set(value) { sp.edit().putBoolean(K_GPT_PROMPT_ON, value).apply() }
+
+    /** GPT_SEARCH: press ChatGPT's send button for you once the image and prompt are in. */
+    var gptAutoSend: Boolean
+        get() = sp.getBoolean(K_GPT_SEND, true)
+        set(value) { sp.edit().putBoolean(K_GPT_SEND, value).apply() }
+
+    fun activeGptPrompt(): String? =
+        if (gptPromptEnabled) gptPromptText.trim().takeIf { it.isNotEmpty() } else null
+
     var bubbleOnRight: Boolean
         get() = sp.getBoolean(K_RIGHT, true)
         set(value) { sp.edit().putBoolean(K_RIGHT, value).apply() }
@@ -71,7 +99,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
 
     /** Edge handle opacity, 0.0 (invisible, still tappable) .. 1.0 */
     var stripOpacity: Float
-        get() = sp.getFloat(K_STRIP_ALPHA, 0.6f).coerceIn(0f, 1f)
+        get() = sp.getFloat(K_STRIP_ALPHA, 0.85f).coerceIn(0f, 1f)
         set(value) { sp.edit().putFloat(K_STRIP_ALPHA, value.coerceIn(0f, 1f)).apply() }
 
     /** Height of every edge handle in dp (all handles share the same size). */
@@ -168,35 +196,44 @@ class Prefs private constructor(private val sp: SharedPreferences) {
      * Saved search area (fractions of the screen, 0..1). When set, a tap on the edge handle searches
      * this area directly instead of opening the lasso. Orientation is remembered so a portrait area
      * is never applied to a landscape screen.
+     *
+     * Every function takes [gpt]: false = the Circle Search (Lens) area, true = the separate area of
+     * the ChatGPT handle.
      */
     val hasSavedArea: Boolean
-        get() = sp.getBoolean(K_AREA_SET, false)
+        get() = hasArea(false)
 
     val areaLandscape: Boolean
-        get() = sp.getBoolean(K_AREA_LAND, false)
+        get() = areaLandscape(false)
 
-    fun savedArea(): RectF? {
-        if (!hasSavedArea) return null
+    private fun ak(gpt: Boolean, key: String) = if (gpt) "gpt_$key" else key
+
+    fun hasArea(gpt: Boolean): Boolean = sp.getBoolean(ak(gpt, K_AREA_SET), false)
+
+    fun areaLandscape(gpt: Boolean): Boolean = sp.getBoolean(ak(gpt, K_AREA_LAND), false)
+
+    fun savedArea(gpt: Boolean = false): RectF? {
+        if (!hasArea(gpt)) return null
         val r = RectF(
-            sp.getFloat(K_AREA_L, 0f), sp.getFloat(K_AREA_T, 0f),
-            sp.getFloat(K_AREA_R, 0f), sp.getFloat(K_AREA_B, 0f)
+            sp.getFloat(ak(gpt, K_AREA_L), 0f), sp.getFloat(ak(gpt, K_AREA_T), 0f),
+            sp.getFloat(ak(gpt, K_AREA_R), 0f), sp.getFloat(ak(gpt, K_AREA_B), 0f)
         )
         return if (r.right > r.left && r.bottom > r.top) r else null
     }
 
-    fun saveArea(fractions: RectF, landscape: Boolean) {
+    fun saveArea(fractions: RectF, landscape: Boolean, gpt: Boolean = false) {
         sp.edit()
-            .putFloat(K_AREA_L, fractions.left.coerceIn(0f, 1f))
-            .putFloat(K_AREA_T, fractions.top.coerceIn(0f, 1f))
-            .putFloat(K_AREA_R, fractions.right.coerceIn(0f, 1f))
-            .putFloat(K_AREA_B, fractions.bottom.coerceIn(0f, 1f))
-            .putBoolean(K_AREA_LAND, landscape)
-            .putBoolean(K_AREA_SET, true)
+            .putFloat(ak(gpt, K_AREA_L), fractions.left.coerceIn(0f, 1f))
+            .putFloat(ak(gpt, K_AREA_T), fractions.top.coerceIn(0f, 1f))
+            .putFloat(ak(gpt, K_AREA_R), fractions.right.coerceIn(0f, 1f))
+            .putFloat(ak(gpt, K_AREA_B), fractions.bottom.coerceIn(0f, 1f))
+            .putBoolean(ak(gpt, K_AREA_LAND), landscape)
+            .putBoolean(ak(gpt, K_AREA_SET), true)
             .apply()
     }
 
-    fun clearArea() {
-        sp.edit().putBoolean(K_AREA_SET, false).apply()
+    fun clearArea(gpt: Boolean = false) {
+        sp.edit().putBoolean(ak(gpt, K_AREA_SET), false).apply()
     }
 
     fun register(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
@@ -217,6 +254,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         const val DEFAULT_HANDLE_DP = 44
         const val DEFAULT_SEARCH_COLOR = 0xFFF1F3F4.toInt()
         const val DEFAULT_CLIP_COLOR = 0xFFFFB224.toInt()
+        const val DEFAULT_GPT_COLOR = 0xFF10A37F.toInt()
 
         private const val FILE = "circle_search_prefs"
         private const val K_AREA_SET = "saved_area_set"
@@ -227,6 +265,11 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_AREA_LAND = "saved_area_landscape"
         private const val K_PROMPT_TEXT = "prompt_text"
         private const val K_PROMPT_ON = "prompt_enabled"
+        private const val K_GPT_ON = "gpt_enabled"
+        private const val K_GPT_COLOR = "gpt_handle_color"
+        private const val K_GPT_PROMPT = "gpt_prompt_text"
+        private const val K_GPT_PROMPT_ON = "gpt_prompt_enabled"
+        private const val K_GPT_SEND = "gpt_auto_send"
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"

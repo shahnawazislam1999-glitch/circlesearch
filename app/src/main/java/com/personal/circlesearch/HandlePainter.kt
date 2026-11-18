@@ -18,11 +18,6 @@ class HandlePainter(private val ctx: Context) {
 
     private val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
     private val body = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        color = Color.WHITE
-        strokeWidth = ctx.dp(1f)
-    }
     private val rect = RectF()
 
     /**
@@ -49,39 +44,34 @@ class HandlePainter(private val ctx: Context) {
         val gap = gapPx(ctx)
         val bar = ctx.dp(BAR_DP)
         val inset = ctx.dp(INSET_DP)
-        val halo = ctx.dp(1.5f)
         val radius = bar / 2f
 
         for (i in colors.indices) {
             val isPressed = i == pressed
             val k = if (isPressed) maxOf(base, 0.95f) else base
-            val w = bar + if (isPressed) ctx.dp(2f) else 0f
+            val w = bar + if (isPressed) ctx.dp(1.5f) else 0f
             val left = if (onRight) viewWidth - inset - w else inset
             val top = pad + i * (handlePx + gap)
 
-            shadow.alpha = (80 * k).toInt()
-            rect.set(left - halo, top - halo, left + w + halo, top + handlePx + halo)
-            canvas.drawRoundRect(rect, radius + halo, radius + halo, shadow)
+            // Hairline shadow so a thin light line stays visible on white screens too.
+            shadow.alpha = (45 * k).toInt()
+            rect.set(left - ctx.dp(0.5f), top, left + w + ctx.dp(0.5f), top + handlePx)
+            canvas.drawRoundRect(rect, radius + 1f, radius + 1f, shadow)
 
             body.color = colors[i]
             body.alpha = (255 * k).toInt()
             rect.set(left, top, left + w, top + handlePx)
             canvas.drawRoundRect(rect, radius, radius, body)
-
-            stroke.alpha = (120 * k).toInt()
-            val half = stroke.strokeWidth / 2f
-            rect.inset(half, half)
-            canvas.drawRoundRect(rect, radius, radius, stroke)
         }
     }
 
     companion object {
         /** Width of the touch strip (and of its window). */
-        const val WIDTH_DP = 28
-        private const val GAP_DP = 0f   // handles touch each other: no gap inside the cluster
+        const val WIDTH_DP = 24
+        private const val GAP_DP = 5f   // small gap so each handle reads as its own thin line
         private const val PAD_DP = 4f
-        private const val BAR_DP = 7f
-        private const val INSET_DP = 3f
+        private const val BAR_DP = 2f   // thin, professional hairline
+        private const val INSET_DP = 1f
 
         fun gapPx(ctx: Context): Float = ctx.dp(GAP_DP)
         fun padPx(ctx: Context): Float = ctx.dp(PAD_DP)
@@ -115,6 +105,7 @@ class HandlePreviewView @JvmOverloads constructor(
     fun bind(prefs: Prefs) {
         val list = ArrayList<Int>()
         list.add(prefs.searchHandleColor)
+        if (prefs.gptEnabled) list.add(prefs.gptHandleColor)
         if (prefs.clipboardEnabled) list.add(prefs.clipHandleColor)
         prefs.shortcuts().forEach { list.add(it.color) }
         colors = list.toIntArray()

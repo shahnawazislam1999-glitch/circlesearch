@@ -214,6 +214,7 @@ class MainActivity : AppCompatActivity() {
 
         switchGesture.setOnCheckedChangeListener { _, checked -> prefs.gestureStrip = checked }
         setupClipboard(switchGesture)
+        setupGpt(switchGesture)
 
         rgLens.setOnCheckedChangeListener { _, id ->
             prefs.lensMode = if (id == R.id.rbWebWindow) Prefs.WEB_WINDOW else Prefs.LENS_APP
@@ -268,6 +269,102 @@ class MainActivity : AppCompatActivity() {
         updateBackgroundStatus()
         updateAreaStatus()
         refreshClipboard()
+        refreshGpt()
+    }
+
+    // ---------------------------------------------------------------- ChatGPT handle (GPT_SEARCH)
+
+    private lateinit var switchGpt: MaterialSwitch
+    private lateinit var layoutGpt: View
+    private lateinit var textGptHint: TextView
+    private lateinit var textGptArea: TextView
+    private lateinit var btnGptRemoveArea: MaterialButton
+    private lateinit var editGptPrompt: EditText
+    private lateinit var switchGptPrompt: MaterialSwitch
+    private lateinit var switchGptSend: MaterialSwitch
+    private var gptSuppress = false
+
+    private fun setupGpt(switchGesture: MaterialSwitch) {
+        switchGpt = findViewById(R.id.switchGpt)
+        layoutGpt = findViewById(R.id.layoutGpt)
+        textGptHint = findViewById(R.id.textGptHint)
+        textGptArea = findViewById(R.id.textGptArea)
+        btnGptRemoveArea = findViewById(R.id.btnGptRemoveArea)
+        editGptPrompt = findViewById(R.id.editGptPrompt)
+        switchGptPrompt = findViewById(R.id.switchGptPrompt)
+        switchGptSend = findViewById(R.id.switchGptSend)
+
+        editGptPrompt.setText(prefs.gptPromptText)
+        editGptPrompt.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { prefs.gptPromptText = s?.toString() ?: "" }
+        })
+        switchGptPrompt.setOnCheckedChangeListener { _, checked ->
+            if (gptSuppress) return@setOnCheckedChangeListener
+            prefs.gptPromptEnabled = checked
+            editGptPrompt.alpha = if (checked) 1f else 0.5f
+        }
+        switchGptSend.setOnCheckedChangeListener { _, checked ->
+            if (gptSuppress) return@setOnCheckedChangeListener
+            prefs.gptAutoSend = checked
+        }
+        switchGpt.setOnCheckedChangeListener { _, checked ->
+            if (gptSuppress) return@setOnCheckedChangeListener
+            prefs.gptEnabled = checked
+            if (checked && !prefs.gestureStrip) {
+                prefs.gestureStrip = true
+                switchGesture.isChecked = true
+            }
+            renderShortcuts()
+            refreshGpt()
+        }
+        findViewById<MaterialButton>(R.id.btnGptSetArea).setOnClickListener {
+            if (CircleAccessibilityService.instance == null) {
+                Toast.makeText(this, "Turn on the Circle Search accessibility service first", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Go to the screen you want. The area picker opens in 5 seconds.", Toast.LENGTH_LONG).show()
+                moveTaskToBack(true)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    CircleAccessibilityService.instance?.startGptAreaPick()
+                }, 5000)
+            }
+        }
+        btnGptRemoveArea.setOnClickListener {
+            prefs.clearArea(true)
+            refreshGpt()
+            Toast.makeText(this, "ChatGPT area removed", Toast.LENGTH_SHORT).show()
+        }
+        refreshGpt()
+    }
+
+    private fun refreshGpt() {
+        if (!this::switchGpt.isInitialized) return
+        gptSuppress = true
+        val on = prefs.gptEnabled
+        switchGpt.isChecked = on
+        switchGptPrompt.isChecked = prefs.gptPromptEnabled
+        switchGptSend.isChecked = prefs.gptAutoSend
+        gptSuppress = false
+        editGptPrompt.alpha = if (prefs.gptPromptEnabled) 1f else 0.5f
+        layoutGpt.visibility = if (on) View.VISIBLE else View.GONE
+        textGptHint.text = if (on) {
+            val inst = if (ChatGptLauncher.isInstalled(this)) "" else " The ChatGPT app is not installed on this phone."
+            "ON: a ChatGPT handle sits under the Circle Search handle. Tap it and the screenshot (or your saved area) opens in the ChatGPT app together with your prompt.$inst"
+        } else {
+            "OFF: switch on to add a ChatGPT handle to the edge handles."
+        }
+        val a = prefs.savedArea(true)
+        if (a == null) {
+            textGptArea.text = "No area saved - the ChatGPT handle opens the lasso."
+            btnGptRemoveArea.visibility = View.GONE
+        } else {
+            val w = ((a.right - a.left) * 100f).roundToInt()
+            val h = ((a.bottom - a.top) * 100f).roundToInt()
+            val orient = if (prefs.areaLandscape(true)) "landscape" else "portrait"
+            textGptArea.text = "Area saved ($w% x $h% of the $orient screen) - the ChatGPT handle sends it."
+            btnGptRemoveArea.visibility = View.VISIBLE
+        }
     }
 
     // ---------------------------------------------------------------- clipboard (PinClip window)
@@ -526,6 +623,13 @@ class MainActivity : AppCompatActivity() {
             null, "Circle Search", "Default handle - lasso or saved area",
             prefs.searchHandleColor, { prefs.searchHandleColor = it }, null
         )
+        if (prefs.gptEnabled) {
+            val gptIcon = try { packageManager.getApplicationIcon(ChatGptLauncher.PACKAGE) } catch (_: Throwable) { null }
+            row(
+                gptIcon, "ChatGPT", "Screenshot + prompt to the ChatGPT app",
+                prefs.gptHandleColor, { prefs.gptHandleColor = it }, null
+            )
+        }
         if (prefs.clipboardEnabled) {
             row(
                 null, "Clipboard", "PinClip window - tap to open",
