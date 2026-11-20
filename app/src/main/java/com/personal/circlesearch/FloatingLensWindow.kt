@@ -52,7 +52,7 @@ class FloatingLensWindow(
         promptText = prompt
         promptApplied = false
         if (root == null && !build()) {
-            Toast.makeText(context, "Could not open the Lens window", Toast.LENGTH_LONG).show()
+            
             onClosed()
             return
         }

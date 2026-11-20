@@ -30,7 +30,8 @@ class GestureStrip(
     private val onTap: () -> Unit,
     private val onShortcut: (AppShortcut) -> Unit,
     private val onClipboard: () -> Unit,
-    private val onGpt: () -> Unit = {}
+    private val onGpt: () -> Unit = {},
+    private val onShot: () -> Unit = {}
 ) {
     private val wm: WindowManager = context.getSystemService(WindowManager::class.java)
     private var view: StripView? = null
@@ -41,7 +42,8 @@ class GestureStrip(
         val color: Int,
         val shortcut: AppShortcut?,
         val isClipboard: Boolean = false,
-        val isGpt: Boolean = false
+        val isGpt: Boolean = false,
+        val isShot: Boolean = false
     )
 
     fun show() {
@@ -94,6 +96,7 @@ class GestureStrip(
         val list = ArrayList<Item>()
         list.add(Item(prefs.searchHandleColor, null))
         if (prefs.gptEnabled) list.add(Item(prefs.gptHandleColor, null, isGpt = true))
+        if (prefs.shotEnabled) list.add(Item(prefs.shotHandleColor, null, isShot = true))
         if (prefs.clipboardEnabled) list.add(Item(prefs.clipHandleColor, null, true))
         for (s in prefs.shortcuts()) list.add(Item(s.color, s))
         return list
@@ -241,6 +244,7 @@ class GestureStrip(
                             when {
                                 shortcut != null -> onShortcut(shortcut)
                                 item.isGpt -> onGpt()
+                                item.isShot -> onShot()
                                 item.isClipboard -> onClipboard()
                                 else -> onTap()
                             }

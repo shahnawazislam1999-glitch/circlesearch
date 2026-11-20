@@ -971,7 +971,8 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
 
     // ───────────────────────── paste / copy ─────────────────────────
 
-    private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+    @Suppress("UNUSED_PARAMETER")
+    private fun toast(m: String) = Unit // notifications disabled
 
     private fun paste(x: Item) {
         Store.touch(x)

@@ -8,7 +8,6 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
 
@@ -75,6 +74,74 @@ class GptFiller(
         handler.postDelayed({ tick(prompt, autoSend) }, FIRST_DELAY_MS)
     }
 
+    private var pasteDone = false
+
+    /**
+     * No-screenshot mode: once ChatGPT is open, paste the most recently copied text into its message
+     * box and press send/Enter. Uses the normal "paste" action (so it works even where apps may not
+     * read the clipboard in the background) and falls back to setting the text directly.
+     */
+    fun runPaste() {
+        attempts = 0
+        finished = false
+        pasteDone = false
+        handler.postDelayed({ pasteTick() }, FIRST_DELAY_MS + 300L)
+    }
+
+    private fun pasteTick() {
+        if (finished) return
+        attempts++
+        val done = try { pasteStep() } catch (_: Throwable) { false }
+        if (done || attempts >= MAX_ATTEMPTS) {
+            finished = true
+            return
+        }
+        handler.postDelayed({ pasteTick() }, STEP_MS)
+    }
+
+    private fun clipText(): String? = try {
+        val cm = service.getSystemService(android.content.ClipboardManager::class.java)
+        cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(service)?.toString()
+            ?.takeIf { it.isNotBlank() }
+    } catch (_: Throwable) { null }
+
+    private fun pasteStep(): Boolean {
+        val rs = roots()
+        if (rs.isEmpty()) return false
+        if (!pasteDone) {
+            for (root in rs) {
+                val edit = find(root) { it.isEditable } ?: continue
+                edit.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                edit.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                var ok = edit.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                if (!ok) {
+                    val t = clipText()
+                    if (t != null) {
+                        val args = Bundle().apply {
+                            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, t)
+                        }
+                        ok = edit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                    }
+                }
+                pasteDone = ok
+                break
+            }
+            return false // check the result / press send on the next tick
+        }
+        // Press send once the box actually holds text (send button becomes enabled).
+        for (root in rs) {
+            val edit = find(root) { it.isEditable }
+            val hasText = edit?.text?.toString()?.isNotBlank() == true
+            if (!hasText) { pasteDone = false; return false }
+            val btn = find(root) { n ->
+                val d = (n.contentDescription?.toString() ?: "").lowercase()
+                n.isEnabled && d.contains("send") && !d.contains("voice")
+            } ?: continue
+            if (clickNode(btn)) return true
+        }
+        return false
+    }
+
     private fun tick(prompt: String?, autoSend: Boolean) {
         if (finished) return
         attempts++
@@ -85,8 +152,6 @@ class GptFiller(
         }
         if (attempts >= MAX_ATTEMPTS) {
             finished = true
-            val msg = if (prompt != null && !typed) "Prompt copied - paste it in ChatGPT" else "Image ready - tap send in ChatGPT"
-            Toast.makeText(service, msg, Toast.LENGTH_LONG).show()
             return
         }
         handler.postDelayed({ tick(prompt, autoSend) }, STEP_MS)

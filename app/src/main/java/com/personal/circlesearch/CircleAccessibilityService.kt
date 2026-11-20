@@ -53,7 +53,7 @@ class CircleAccessibilityService : AccessibilityService() {
     /** true while the running session was started from the ChatGPT handle. */
     private var gpt = false
 
-    private enum class Mode { LASSO, AREA_SEARCH, AREA_PICK }
+    private enum class Mode { LASSO, AREA_SEARCH, AREA_PICK, SHOT }
 
     private var mode = Mode.LASSO
 
@@ -73,7 +73,7 @@ class CircleAccessibilityService : AccessibilityService() {
         io = Executors.newSingleThreadExecutor()
         bubble = BubbleOverlay(this, prefs) { startSelection() }
         clip = ClipboardWindow(this)
-        strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) }, { openClipboard() }, { onGptTap() })
+        strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) }, { openClipboard() }, { onGptTap() }, { onShotTap() })
         prefs.register(prefListener)
         applyPrefs()
     }
@@ -166,7 +166,7 @@ class CircleAccessibilityService : AccessibilityService() {
     }
 
     private fun applyPrefs() {
-        ensureForeground(prefs.serviceActive)
+        ensureForeground(prefs.serviceActive && prefs.runningNotification)
         clip?.active = prefs.serviceActive && prefs.clipboardEnabled && prefs.gestureStrip
         // Uninstalled apps lose their handle automatically.
         prefs.pruneUninstalled(packageManager)
@@ -205,8 +205,9 @@ class CircleAccessibilityService : AccessibilityService() {
     /** ChatGPT handle tap: same idea as the search handle, but with its own saved area. */
     fun onGptTap() {
         if (busy || !prefs.serviceActive || !prefs.gptEnabled) return
-        if (!ChatGptLauncher.isInstalled(this)) {
-            Toast.makeText(this, "ChatGPT app isn't installed", Toast.LENGTH_SHORT).show()
+        if (!ChatGptLauncher.isInstalled(this)) return
+        if (!prefs.gptCaptureEnabled) {
+            openGptOnly()
             return
         }
         if (prefs.savedArea(true) == null || prefs.areaLandscape(true) != isLandscape()) {
@@ -214,6 +215,48 @@ class CircleAccessibilityService : AccessibilityService() {
         } else {
             begin(Mode.AREA_SEARCH, true)
         }
+    }
+
+    /** Screenshot handle: saves the saved area (or the whole screen) to the gallery, silently. */
+    fun onShotTap() {
+        if (busy || !prefs.serviceActive || !prefs.shotEnabled) return
+        begin(Mode.SHOT)
+    }
+
+    private fun saveShot(bitmap: Bitmap) {
+        val executor = io
+        if (executor == null) {
+            bitmap.recycle()
+            finishSession()
+            return
+        }
+        val area = if (!prefs.shotWholeScreen && prefs.areaLandscape(false) == isLandscape()) prefs.savedArea() else null
+        val appContext = applicationContext
+        executor.execute {
+            try {
+                var out = bitmap
+                if (area != null) {
+                    val w = bitmap.width
+                    val h = bitmap.height
+                    val l = (area.left * w).toInt().coerceIn(0, w - 1)
+                    val t = (area.top * h).toInt().coerceIn(0, h - 1)
+                    val r = (area.right * w).toInt().coerceIn(l + 1, w)
+                    val b = (area.bottom * h).toInt().coerceIn(t + 1, h)
+                    out = Bitmap.createBitmap(bitmap, l, t, r - l, b - t)
+                }
+                ImageUtils.saveToGallery(appContext, out)
+                if (out !== bitmap) out.recycle()
+                if (!bitmap.isRecycled) bitmap.recycle()
+            } catch (_: Throwable) {
+            }
+            main.post { finishSession() }
+        }
+    }
+
+    /** Capture off: no screenshot, just open ChatGPT in a floating window (optionally paste the clipboard). */
+    private fun openGptOnly() {
+        val ok = AppLauncher.launchFloating(this, ChatGptLauncher.PACKAGE, floatingBounds())
+        if (ok && prefs.gptPasteClipboard) GptFiller(this, main).runPaste()
     }
 
     /** Freezes the screen so the user can drag out the ChatGPT area to save. */
@@ -231,11 +274,9 @@ class CircleAccessibilityService : AccessibilityService() {
         if (packageManager.getLaunchIntentForPackage(shortcut.packageName) == null) {
             // App is gone: delete its handle (the cluster updates itself through the prefs listener).
             prefs.removeShortcut(shortcut.id)
-            Toast.makeText(this, "${shortcut.label} isn't installed - shortcut removed", Toast.LENGTH_SHORT).show()
             return
         }
         if (!AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds())) {
-            Toast.makeText(this, "Couldn't open ${shortcut.label}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -314,6 +355,7 @@ class CircleAccessibilityService : AccessibilityService() {
         when (mode) {
             Mode.AREA_SEARCH -> searchSavedArea(bitmap)
             Mode.AREA_PICK -> showPicker(bitmap)
+            Mode.SHOT -> saveShot(bitmap)
             Mode.LASSO -> {
                 val sel = SelectionOverlay(
                     this,
@@ -325,7 +367,6 @@ class CircleAccessibilityService : AccessibilityService() {
                     onRemoveArea = {
                         main.post {
                             prefs.clearArea(gpt)
-                            Toast.makeText(this, "Saved area removed", Toast.LENGTH_SHORT).show()
                             finishSession()
                         }
                     }
@@ -405,14 +446,12 @@ class CircleAccessibilityService : AccessibilityService() {
             onSave = { fractions ->
                 main.post {
                     prefs.saveArea(fractions, isLandscape(), gpt)
-                    Toast.makeText(this, "Area saved", Toast.LENGTH_SHORT).show()
                     finishSession()
                 }
             },
             onRemove = {
                 main.post {
                     prefs.clearArea(gpt)
-                    Toast.makeText(this, "Saved area removed", Toast.LENGTH_SHORT).show()
                     finishSession()
                 }
             },
@@ -477,7 +516,6 @@ class CircleAccessibilityService : AccessibilityService() {
         if (ok) {
             GptFiller(this, main).run(prompt, prefs.gptAutoSend)
         } else {
-            Toast.makeText(this, "Couldn't open the ChatGPT app", Toast.LENGTH_SHORT).show()
         }
         main.postDelayed({ finishSession() }, if (ok) 450L else 120L)
     }
@@ -524,8 +562,7 @@ class CircleAccessibilityService : AccessibilityService() {
 
     private fun fail(message: String) {
         // Searching a saved area is meant to be completely silent: nothing is shown on screen.
-        if (mode != Mode.AREA_SEARCH) Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        finishSession()
+                finishSession()
     }
 
     private fun finishSession() {

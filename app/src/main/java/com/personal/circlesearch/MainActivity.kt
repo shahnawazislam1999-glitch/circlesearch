@@ -54,7 +54,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var textBattery: TextView
     private lateinit var btnBattery: MaterialButton
-    private lateinit var btnNotif: MaterialButton
     private lateinit var textOverlay: TextView
     private lateinit var btnOverlay: MaterialButton
 
@@ -119,7 +118,6 @@ class MainActivity : AppCompatActivity() {
         val switchActive: MaterialSwitch = findViewById(R.id.switchActive)
         textBattery = findViewById(R.id.textBattery)
         btnBattery = findViewById(R.id.btnBattery)
-        btnNotif = findViewById(R.id.btnNotif)
         switchActive.isChecked = prefs.serviceActive
         switchActive.setOnCheckedChangeListener { _, checked -> prefs.serviceActive = checked }
         textOverlay = findViewById(R.id.textOverlay)
@@ -134,15 +132,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnBattery.setOnClickListener { requestBatteryExemption() }
-        btnNotif.setOnClickListener {
-            if (Build.VERSION.SDK_INT >= 33) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
-            }
-        }
-        // Ask once on first launch so the foreground notification can show.
-        if (Build.VERSION.SDK_INT >= 33 && !notificationsGranted()) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
-        }
 
         val switchBubble: MaterialSwitch = findViewById(R.id.switchBubble)
         val sliderOpacity: Slider = findViewById(R.id.sliderOpacity)
@@ -216,6 +205,34 @@ class MainActivity : AppCompatActivity() {
         setupClipboard(switchGesture)
         setupGpt(switchGesture)
 
+        val switchShot: MaterialSwitch = findViewById(R.id.switchShot)
+        val switchShotWhole: MaterialSwitch = findViewById(R.id.switchShotWhole)
+        val layoutShot: View = findViewById(R.id.layoutShot)
+        val textShotHint: TextView = findViewById(R.id.textShotHint)
+        fun refreshShot() {
+            layoutShot.visibility = if (prefs.shotEnabled) View.VISIBLE else View.GONE
+            textShotHint.text = if (prefs.shotEnabled) {
+                if (prefs.shotWholeScreen) "ON: tap the screenshot handle to save the whole screen to Pictures/CircleSearch."
+                else "ON: tap the screenshot handle to save your saved area (whole screen if none is saved) to Pictures/CircleSearch."
+            } else "OFF: switch on to add a screenshot handle to the edge handles."
+        }
+        switchShot.isChecked = prefs.shotEnabled
+        switchShotWhole.isChecked = prefs.shotWholeScreen
+        refreshShot()
+        switchShot.setOnCheckedChangeListener { _, checked ->
+            prefs.shotEnabled = checked
+            if (checked && !prefs.gestureStrip) {
+                prefs.gestureStrip = true
+                switchGesture.isChecked = true
+            }
+            refreshShot()
+            renderShortcuts()
+        }
+        switchShotWhole.setOnCheckedChangeListener { _, checked ->
+            prefs.shotWholeScreen = checked
+            refreshShot()
+        }
+
         rgLens.setOnCheckedChangeListener { _, id ->
             prefs.lensMode = if (id == R.id.rbWebWindow) Prefs.WEB_WINDOW else Prefs.LENS_APP
         }
@@ -277,8 +294,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchGpt: MaterialSwitch
     private lateinit var layoutGpt: View
     private lateinit var textGptHint: TextView
-    private lateinit var textGptArea: TextView
-    private lateinit var btnGptRemoveArea: MaterialButton
+    private lateinit var switchGptCapture: MaterialSwitch
+    private lateinit var switchGptPaste: MaterialSwitch
+    private lateinit var textGptCapture: TextView
+    private lateinit var layoutGptCapture: View
     private lateinit var editGptPrompt: EditText
     private lateinit var switchGptPrompt: MaterialSwitch
     private lateinit var switchGptSend: MaterialSwitch
@@ -288,8 +307,10 @@ class MainActivity : AppCompatActivity() {
         switchGpt = findViewById(R.id.switchGpt)
         layoutGpt = findViewById(R.id.layoutGpt)
         textGptHint = findViewById(R.id.textGptHint)
-        textGptArea = findViewById(R.id.textGptArea)
-        btnGptRemoveArea = findViewById(R.id.btnGptRemoveArea)
+        switchGptCapture = findViewById(R.id.switchGptCapture)
+        switchGptPaste = findViewById(R.id.switchGptPaste)
+        textGptCapture = findViewById(R.id.textGptCapture)
+        layoutGptCapture = findViewById(R.id.layoutGptCapture)
         editGptPrompt = findViewById(R.id.editGptPrompt)
         switchGptPrompt = findViewById(R.id.switchGptPrompt)
         switchGptSend = findViewById(R.id.switchGptSend)
@@ -319,21 +340,14 @@ class MainActivity : AppCompatActivity() {
             renderShortcuts()
             refreshGpt()
         }
-        findViewById<MaterialButton>(R.id.btnGptSetArea).setOnClickListener {
-            if (CircleAccessibilityService.instance == null) {
-                Toast.makeText(this, "Turn on the Circle Search accessibility service first", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this, "Go to the screen you want. The area picker opens in 5 seconds.", Toast.LENGTH_LONG).show()
-                moveTaskToBack(true)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    CircleAccessibilityService.instance?.startGptAreaPick()
-                }, 5000)
-            }
-        }
-        btnGptRemoveArea.setOnClickListener {
-            prefs.clearArea(true)
+        switchGptCapture.setOnCheckedChangeListener { _, checked ->
+            if (gptSuppress) return@setOnCheckedChangeListener
+            prefs.gptCaptureEnabled = checked
             refreshGpt()
-            Toast.makeText(this, "ChatGPT area removed", Toast.LENGTH_SHORT).show()
+        }
+        switchGptPaste.setOnCheckedChangeListener { _, checked ->
+            if (gptSuppress) return@setOnCheckedChangeListener
+            prefs.gptPasteClipboard = checked
         }
         refreshGpt()
     }
@@ -345,7 +359,15 @@ class MainActivity : AppCompatActivity() {
         switchGpt.isChecked = on
         switchGptPrompt.isChecked = prefs.gptPromptEnabled
         switchGptSend.isChecked = prefs.gptAutoSend
+        val cap = prefs.gptCaptureEnabled
+        switchGptCapture.isChecked = cap
+        switchGptPaste.isChecked = prefs.gptPasteClipboard
         gptSuppress = false
+        layoutGptCapture.visibility = if (cap) View.VISIBLE else View.GONE
+        switchGptPaste.visibility = if (cap) View.GONE else View.VISIBLE
+        (switchGptPaste.parent as? View)?.visibility = if (cap) View.GONE else View.VISIBLE
+        textGptCapture.text = if (cap) "ON: the handle captures the screen (or your saved area) and shares it to ChatGPT."
+        else "OFF: no screenshot. The handle only opens ChatGPT in a floating window."
         editGptPrompt.alpha = if (prefs.gptPromptEnabled) 1f else 0.5f
         layoutGpt.visibility = if (on) View.VISIBLE else View.GONE
         textGptHint.text = if (on) {
@@ -353,17 +375,6 @@ class MainActivity : AppCompatActivity() {
             "ON: a ChatGPT handle sits under the Circle Search handle. Tap it and the screenshot (or your saved area) opens in the ChatGPT app together with your prompt.$inst"
         } else {
             "OFF: switch on to add a ChatGPT handle to the edge handles."
-        }
-        val a = prefs.savedArea(true)
-        if (a == null) {
-            textGptArea.text = "No area saved - the ChatGPT handle opens the lasso."
-            btnGptRemoveArea.visibility = View.GONE
-        } else {
-            val w = ((a.right - a.left) * 100f).roundToInt()
-            val h = ((a.bottom - a.top) * 100f).roundToInt()
-            val orient = if (prefs.areaLandscape(true)) "landscape" else "portrait"
-            textGptArea.text = "Area saved ($w% x $h% of the $orient screen) - the ChatGPT handle sends it."
-            btnGptRemoveArea.visibility = View.VISIBLE
         }
     }
 
@@ -529,7 +540,6 @@ class MainActivity : AppCompatActivity() {
         textOverlay.text = if (overlayOk) "Display over other apps: allowed - Lens always opens from the edge handle."
         else "Display over other apps: off. Allow it if Lens doesn't open when you tap the edge handle with a saved area."
         btnOverlay.visibility = if (overlayOk) android.view.View.GONE else android.view.View.VISIBLE
-        btnNotif.visibility = if (notificationsGranted()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     private fun isServiceEnabled(): Boolean {
@@ -628,6 +638,12 @@ class MainActivity : AppCompatActivity() {
             row(
                 gptIcon, "ChatGPT", "Screenshot + prompt to the ChatGPT app",
                 prefs.gptHandleColor, { prefs.gptHandleColor = it }, null
+            )
+        }
+        if (prefs.shotEnabled) {
+            row(
+                null, "Screenshot", if (prefs.shotWholeScreen) "Saves the whole screen" else "Saves the saved area",
+                prefs.shotHandleColor, { prefs.shotHandleColor = it }, null
             )
         }
         if (prefs.clipboardEnabled) {

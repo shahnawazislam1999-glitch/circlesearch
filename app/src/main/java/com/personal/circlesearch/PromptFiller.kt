@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Toast
 
 /**
  * PROMPT_SEARCH (Lens app mode): the Google app has no public way to pre-fill its
@@ -38,11 +37,6 @@ class PromptFiller(
         }
         if (attempts >= MAX_ATTEMPTS) {
             finished = true
-            Toast.makeText(
-                service,
-                "Prompt copied - tap the box and paste it",
-                Toast.LENGTH_LONG
-            ).show()
             return
         }
         handler.postDelayed({ tick(prompt) }, STEP_MS)

@@ -7,6 +7,27 @@ import java.io.File
 
 object ImageUtils {
 
+    /** Saves a screenshot as PNG into Pictures/CircleSearch (no permission needed on Android 10+). */
+    fun saveToGallery(context: Context, bitmap: Bitmap) {
+        val resolver = context.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "shot_${System.currentTimeMillis()}.png")
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CircleSearch")
+            put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return
+        try {
+            resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            values.clear()
+            values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } catch (e: Throwable) {
+            try { resolver.delete(uri, null, null) } catch (_: Throwable) {}
+        }
+    }
+
+
     fun scaleDown(src: Bitmap, maxSide: Int): Bitmap {
         val longest = maxOf(src.width, src.height)
         if (longest <= maxSide) return src

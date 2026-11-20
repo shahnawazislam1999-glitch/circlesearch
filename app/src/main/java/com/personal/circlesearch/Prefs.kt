@@ -76,6 +76,37 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getBoolean(K_GPT_SEND, true)
         set(value) { sp.edit().putBoolean(K_GPT_SEND, value).apply() }
 
+    /** GPT: when off, tapping the ChatGPT handle takes NO screenshot - it only opens ChatGPT in a floating window. */
+    var gptCaptureEnabled: Boolean
+        get() = sp.getBoolean(K_GPT_CAPTURE, true)
+        set(value) { sp.edit().putBoolean(K_GPT_CAPTURE, value).apply() }
+
+    /** GPT (capture off): paste the latest copied text into ChatGPT's message box and press Enter. */
+    var gptPasteClipboard: Boolean
+        get() = sp.getBoolean(K_GPT_PASTE, false)
+        set(value) { sp.edit().putBoolean(K_GPT_PASTE, value).apply() }
+
+    /** Small "Circle Search is running" notification. Off by default (no notifications at all). */
+    var runningNotification: Boolean
+        get() = sp.getBoolean(K_RUN_NOTIF, false)
+        set(value) { sp.edit().putBoolean(K_RUN_NOTIF, value).apply() }
+
+    // ------------------------------------------------------------------ Screenshot handle
+
+    /** When on, an edge handle joins the cluster that saves a screenshot to the gallery with one tap. */
+    var shotEnabled: Boolean
+        get() = sp.getBoolean(K_SHOT_ON, false)
+        set(value) { sp.edit().putBoolean(K_SHOT_ON, value).apply() }
+
+    /** true = whole screen; false = the global saved area (whole screen if no area is saved). */
+    var shotWholeScreen: Boolean
+        get() = sp.getBoolean(K_SHOT_WHOLE, false)
+        set(value) { sp.edit().putBoolean(K_SHOT_WHOLE, value).apply() }
+
+    var shotHandleColor: Int
+        get() = sp.getInt(K_SHOT_COLOR, DEFAULT_SHOT_COLOR) or AppShortcut.OPAQUE
+        set(value) { sp.edit().putInt(K_SHOT_COLOR, value or AppShortcut.OPAQUE).apply() }
+
     fun activeGptPrompt(): String? =
         if (gptPromptEnabled) gptPromptText.trim().takeIf { it.isNotEmpty() } else null
 
@@ -206,7 +237,9 @@ class Prefs private constructor(private val sp: SharedPreferences) {
     val areaLandscape: Boolean
         get() = areaLandscape(false)
 
-    private fun ak(gpt: Boolean, key: String) = if (gpt) "gpt_$key" else key
+    // One global area shared by Circle Search (Lens) and ChatGPT: the [gpt] flag is ignored on purpose.
+    @Suppress("UNUSED_PARAMETER")
+    private fun ak(gpt: Boolean, key: String) = key
 
     fun hasArea(gpt: Boolean): Boolean = sp.getBoolean(ak(gpt, K_AREA_SET), false)
 
@@ -254,6 +287,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         const val DEFAULT_HANDLE_DP = 44
         const val DEFAULT_SEARCH_COLOR = 0xFFF1F3F4.toInt()
         const val DEFAULT_CLIP_COLOR = 0xFFFFB224.toInt()
+        const val DEFAULT_SHOT_COLOR = 0xFF4C8DFF.toInt()
         const val DEFAULT_GPT_COLOR = 0xFF10A37F.toInt()
 
         private const val FILE = "circle_search_prefs"
@@ -269,7 +303,13 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_GPT_COLOR = "gpt_handle_color"
         private const val K_GPT_PROMPT = "gpt_prompt_text"
         private const val K_GPT_PROMPT_ON = "gpt_prompt_enabled"
+        private const val K_SHOT_ON = "shot_enabled"
+        private const val K_SHOT_WHOLE = "shot_whole_screen"
+        private const val K_SHOT_COLOR = "shot_handle_color"
         private const val K_GPT_SEND = "gpt_auto_send"
+        private const val K_GPT_CAPTURE = "gpt_capture_enabled"
+        private const val K_GPT_PASTE = "gpt_paste_clipboard"
+        private const val K_RUN_NOTIF = "running_notification"
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"
         private const val K_STRIP_Y = "strip_y_fraction"

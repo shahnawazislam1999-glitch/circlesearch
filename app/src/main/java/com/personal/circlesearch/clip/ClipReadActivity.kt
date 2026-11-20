@@ -41,7 +41,7 @@ object ClipReader {
         Store.lastClip = t
         val added = Store.addText(t)
         Store.log(if (added) "saved text (" + t.length + " chars)" else "text already saved - moved to top")
-        Toast.makeText(ctx, if (added) "Saved to PinClip" else "Already in PinClip", Toast.LENGTH_SHORT).show()
+        
         return true
     }
 }
