@@ -65,6 +65,13 @@ class CircleAccessibilityService : AccessibilityService() {
         main.post { applyPrefs() }
     }
 
+    private val secureObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            // Someone (or the system) switched the service off: switch it straight back on.
+            if (this@CircleAccessibilityService::prefs.isInitialized) SelfEnable.ensureEnabled(this@CircleAccessibilityService)
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         cleanup()
@@ -75,6 +82,12 @@ class CircleAccessibilityService : AccessibilityService() {
         clip = ClipboardWindow(this)
         strip = GestureStrip(this, prefs, { onHandleTap() }, { openShortcut(it) }, { openClipboard() }, { onGptTap() }, { onShotTap() })
         prefs.register(prefListener)
+        try {
+            contentResolver.registerContentObserver(
+                android.provider.Settings.Secure.getUriFor(android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+                false, secureObserver
+            )
+        } catch (_: Throwable) {}
         applyPrefs()
     }
 
@@ -96,6 +109,8 @@ class CircleAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
+        // If the system just dropped the service (not the user via our own switch), switch it straight back on.
+        if (this::prefs.isInitialized) SelfEnable.ensureEnabled(this)
         cleanup()
         return super.onUnbind(intent)
     }
@@ -106,6 +121,7 @@ class CircleAccessibilityService : AccessibilityService() {
     }
 
     private fun cleanup() {
+        try { contentResolver.unregisterContentObserver(secureObserver) } catch (_: Throwable) {}
         main.removeCallbacksAndMessages(null)
         if (this::prefs.isInitialized) {
             try { prefs.unregister(prefListener) } catch (_: Throwable) {}
@@ -276,8 +292,8 @@ class CircleAccessibilityService : AccessibilityService() {
             prefs.removeShortcut(shortcut.id)
             return
         }
-        if (!AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds())) {
-        }
+        val ok = AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds())
+        if (ok && prefs.autoPaste) GptFiller(this, main, shortcut.packageName).runPaste()
     }
 
     /** Freezes the screen and lets the user drag out the area to save. */

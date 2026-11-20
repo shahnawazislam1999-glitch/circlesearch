@@ -83,12 +83,25 @@ class Prefs private constructor(private val sp: SharedPreferences) {
 
     /** GPT (capture off): paste the latest copied text into ChatGPT's message box and press Enter. */
     var gptPasteClipboard: Boolean
+        get() = autoPaste
+        set(value) { autoPaste = value }
+
+    /**
+     * Global auto-paste: when ON, every handle that opens an app in a floating window (ChatGPT without
+     * capture, Grok, Claude, any app you added) pastes the last copied text into it and presses send.
+     */
+    var autoPaste: Boolean
         get() = sp.getBoolean(K_GPT_PASTE, false)
         set(value) { sp.edit().putBoolean(K_GPT_PASTE, value).apply() }
 
-    /** Small "Circle Search is running" notification. Off by default (no notifications at all). */
+    /** Re-enable the accessibility service automatically whenever it gets switched off (needs WRITE_SECURE_SETTINGS). */
+    var autoEnable: Boolean
+        get() = sp.getBoolean(K_AUTO_ENABLE, true)
+        set(value) { sp.edit().putBoolean(K_AUTO_ENABLE, value).apply() }
+
+    /** Small "Circle Search is running" notification. On by default: it is what keeps Android from killing the app. */
     var runningNotification: Boolean
-        get() = sp.getBoolean(K_RUN_NOTIF, false)
+        get() = sp.getBoolean(K_RUN_NOTIF, true)
         set(value) { sp.edit().putBoolean(K_RUN_NOTIF, value).apply() }
 
     // ------------------------------------------------------------------ Screenshot handle
@@ -309,6 +322,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_GPT_SEND = "gpt_auto_send"
         private const val K_GPT_CAPTURE = "gpt_capture_enabled"
         private const val K_GPT_PASTE = "gpt_paste_clipboard"
+        private const val K_AUTO_ENABLE = "auto_enable_accessibility"
         private const val K_RUN_NOTIF = "running_notification"
         private const val K_ACTIVE = "service_active"
         private const val K_STRIP_RIGHT = "strip_on_right"

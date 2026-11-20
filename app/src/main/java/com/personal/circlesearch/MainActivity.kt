@@ -132,6 +132,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnBattery.setOnClickListener { requestBatteryExemption() }
+        val switchKeepAlive: MaterialSwitch = findViewById(R.id.switchKeepAlive)
+        switchKeepAlive.isChecked = prefs.runningNotification
+        switchKeepAlive.setOnCheckedChangeListener { _, checked -> prefs.runningNotification = checked }
+        val switchAuto: MaterialSwitch = findViewById(R.id.switchAutoEnable)
+        switchAuto.isChecked = prefs.autoEnable
+        switchAuto.setOnCheckedChangeListener { _, checked ->
+            prefs.autoEnable = checked
+            updateBackgroundStatus()
+            if (checked) SelfEnable.ensureEnabled(this)
+        }
+        findViewById<MaterialButton>(R.id.btnAutostart).setOnClickListener { openAutostartSettings() }
 
         val switchBubble: MaterialSwitch = findViewById(R.id.switchBubble)
         val sliderOpacity: Slider = findViewById(R.id.sliderOpacity)
@@ -204,6 +215,19 @@ class MainActivity : AppCompatActivity() {
         switchGesture.setOnCheckedChangeListener { _, checked -> prefs.gestureStrip = checked }
         setupClipboard(switchGesture)
         setupGpt(switchGesture)
+
+        val switchAutoPaste: MaterialSwitch = findViewById(R.id.switchAutoPaste)
+        switchAutoPaste.isChecked = prefs.autoPaste
+        switchAutoPaste.setOnCheckedChangeListener { _, checked ->
+            prefs.autoPaste = checked
+            if (!gptSuppress) refreshGpt()
+        }
+        autoPasteSwitch = switchAutoPaste
+        findViewById<MaterialButton>(R.id.btnPasteDebug).setOnClickListener {
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("paste debug", PasteSender.readLog(this)))
+            Toast.makeText(this, "Debug log copied - paste it to share", Toast.LENGTH_SHORT).show()
+        }
 
         val switchShot: MaterialSwitch = findViewById(R.id.switchShot)
         val switchShotWhole: MaterialSwitch = findViewById(R.id.switchShotWhole)
@@ -280,6 +304,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        SelfEnable.ensureEnabled(this)
         prefs.pruneUninstalled(packageManager)
         renderShortcuts()
         updateStatus()
@@ -296,6 +321,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textGptHint: TextView
     private lateinit var switchGptCapture: MaterialSwitch
     private lateinit var switchGptPaste: MaterialSwitch
+    private var autoPasteSwitch: MaterialSwitch? = null
     private lateinit var textGptCapture: TextView
     private lateinit var layoutGptCapture: View
     private lateinit var editGptPrompt: EditText
@@ -362,6 +388,7 @@ class MainActivity : AppCompatActivity() {
         val cap = prefs.gptCaptureEnabled
         switchGptCapture.isChecked = cap
         switchGptPaste.isChecked = prefs.gptPasteClipboard
+        autoPasteSwitch?.let { if (it.isChecked != prefs.autoPaste) it.isChecked = prefs.autoPaste }
         gptSuppress = false
         layoutGptCapture.visibility = if (cap) View.VISIBLE else View.GONE
         switchGptPaste.visibility = if (cap) View.GONE else View.VISIBLE
@@ -512,6 +539,24 @@ class MainActivity : AppCompatActivity() {
         Build.VERSION.SDK_INT < 33 ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    /** Xiaomi/MIUI/HyperOS (and a few others) kill apps on "clear recents" unless Autostart is allowed. */
+    private fun openAutostartSettings() {
+        val candidates = listOf(
+            Intent().setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            Intent().setClassName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
+                .putExtra("package_name", packageName).putExtra("package_label", getString(R.string.app_name)),
+            Intent().setClassName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+            Intent().setClassName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+            Intent().setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")
+        )
+        for (i in candidates) {
+            try { startActivity(i); return } catch (_: Throwable) {}
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        } catch (_: Throwable) {}
+    }
+
     private fun batteryUnrestricted(): Boolean =
         getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
 
@@ -532,6 +577,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBackgroundStatus() {
+        val textAuto: TextView = findViewById(R.id.textAutoEnable)
+        textAuto.text = if (SelfEnable.hasPermission(this)) "Auto-enable: ready. If accessibility ever turns off, the app switches it back on by itself."
+        else "Auto-enable needs a one-time permission. On a computer with USB debugging, run:\nadb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
+        textAuto.setTextIsSelectable(true)
         val ok = batteryUnrestricted()
         textBattery.text = if (ok) "Battery: unrestricted - Android won't stop the app."
         else "Battery: restricted - Android may kill the app. Tap below to fix."
