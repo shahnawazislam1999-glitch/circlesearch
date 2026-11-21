@@ -10,7 +10,9 @@ data class AppShortcut(
     val id: String,
     val packageName: String,
     val label: String,
-    val color: Int
+    val color: Int,
+    /** false = this app opens normally (full screen) instead of in a floating window. */
+    val floating: Boolean = true
 ) {
     companion object {
         const val OPAQUE: Int = 0xFF000000.toInt()
@@ -28,9 +30,10 @@ object AppLauncher {
      * are switched off the system ignores the request and the app simply opens normally.
      * Returns false when the app can't be launched (e.g. it was uninstalled).
      */
-    fun launchFloating(context: Context, packageName: String, bounds: Rect): Boolean {
+    fun launchFloating(context: Context, packageName: String, bounds: Rect, floating: Boolean = true): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        return LensLauncher.start(context, intent, bounds)
+        // floating off -> no launch bounds, no freeform request: the app opens full screen like normal.
+        return LensLauncher.start(context, intent, if (floating) bounds else null)
     }
 }

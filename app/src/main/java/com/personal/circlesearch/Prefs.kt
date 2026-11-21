@@ -94,6 +94,28 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getBoolean(K_GPT_PASTE, false)
         set(value) { sp.edit().putBoolean(K_GPT_PASTE, value).apply() }
 
+    /** Optional prompt put in front of the copied text on every auto paste. */
+    var autoPastePrompt: String
+        get() = sp.getString(K_AP_PROMPT, "") ?: ""
+        set(value) { sp.edit().putString(K_AP_PROMPT, value).apply() }
+
+    var autoPastePromptEnabled: Boolean
+        get() = sp.getBoolean(K_AP_PROMPT_ON, true)
+        set(value) { sp.edit().putBoolean(K_AP_PROMPT_ON, value).apply() }
+
+    fun activeAutoPastePrompt(): String? =
+        if (autoPastePromptEnabled) autoPastePrompt.trim().takeIf { it.isNotEmpty() } else null
+
+    /** Circle Search (Lens) handle: false = Google Lens opens normally (full screen) instead of floating. */
+    var lensFloating: Boolean
+        get() = sp.getBoolean(K_LENS_FLOAT, true)
+        set(value) { sp.edit().putBoolean(K_LENS_FLOAT, value).apply() }
+
+    /** ChatGPT handle: false = ChatGPT opens normally (full screen) instead of floating. */
+    var gptFloating: Boolean
+        get() = sp.getBoolean(K_GPT_FLOAT, true)
+        set(value) { sp.edit().putBoolean(K_GPT_FLOAT, value).apply() }
+
     /** Re-enable the accessibility service automatically whenever it gets switched off (needs WRITE_SECURE_SETTINGS). */
     var autoEnable: Boolean
         get() = sp.getBoolean(K_AUTO_ENABLE, true)
@@ -176,7 +198,8 @@ class Prefs private constructor(private val sp: SharedPreferences) {
                 out.add(
                     AppShortcut(
                         o.getString("id"), o.getString("pkg"), o.getString("label"),
-                        o.getInt("color") or AppShortcut.OPAQUE
+                        o.getInt("color") or AppShortcut.OPAQUE,
+                        o.optBoolean("floating", true)
                     )
                 )
             }
@@ -195,6 +218,7 @@ class Prefs private constructor(private val sp: SharedPreferences) {
                     .put("pkg", s.packageName)
                     .put("label", s.label)
                     .put("color", s.color)
+                    .put("floating", s.floating)
             )
         }
         sp.edit().putString(K_SHORTCUTS, arr.toString()).apply()
@@ -223,6 +247,10 @@ class Prefs private constructor(private val sp: SharedPreferences) {
 
     fun setShortcutColor(id: String, color: Int) {
         saveShortcuts(shortcuts().map { if (it.id == id) it.copy(color = color or AppShortcut.OPAQUE) else it })
+    }
+
+    fun setShortcutFloating(id: String, floating: Boolean) {
+        saveShortcuts(shortcuts().map { if (it.id == id) it.copy(floating = floating) else it })
     }
 
     /** Drops shortcuts whose app was uninstalled, so their handle disappears on its own. */
@@ -322,6 +350,10 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_GPT_SEND = "gpt_auto_send"
         private const val K_GPT_CAPTURE = "gpt_capture_enabled"
         private const val K_GPT_PASTE = "gpt_paste_clipboard"
+        private const val K_AP_PROMPT = "auto_paste_prompt"
+        private const val K_AP_PROMPT_ON = "auto_paste_prompt_enabled"
+        private const val K_LENS_FLOAT = "lens_floating"
+        private const val K_GPT_FLOAT = "gpt_floating"
         private const val K_AUTO_ENABLE = "auto_enable_accessibility"
         private const val K_RUN_NOTIF = "running_notification"
         private const val K_ACTIVE = "service_active"

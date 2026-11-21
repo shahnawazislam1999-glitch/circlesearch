@@ -22,7 +22,7 @@ object ChatGptLauncher {
     fun isInstalled(context: Context): Boolean =
         try { context.packageManager.getLaunchIntentForPackage(PACKAGE) != null } catch (_: Throwable) { false }
 
-    fun launch(context: Context, imageFile: File, bounds: Rect, prompt: String?): Boolean {
+    fun launch(context: Context, imageFile: File, bounds: Rect, prompt: String?, floating: Boolean = true): Boolean {
         val uri = try {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile)
         } catch (_: Exception) {
@@ -50,7 +50,7 @@ object ChatGptLauncher {
             context.grantUriPermission(PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) {
         }
-        return LensLauncher.start(context, intent, bounds)
+        return LensLauncher.start(context, intent, if (floating) bounds else null)
     }
 }
 
@@ -76,8 +76,8 @@ class GptFiller(
     }
 
     /** No-screenshot / any-app mode: paste the copied text into the app and send it (see PasteSender). */
-    fun runPaste() {
-        PasteSender(service, handler, pkg).start()
+    fun runPaste(prompt: String? = null) {
+        PasteSender(service, handler, pkg, prompt).start()
     }
 
     private fun tick(prompt: String?, autoSend: Boolean) {

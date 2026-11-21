@@ -223,6 +223,28 @@ class MainActivity : AppCompatActivity() {
             if (!gptSuppress) refreshGpt()
         }
         autoPasteSwitch = switchAutoPaste
+        // Auto paste prompt box + switch (off = only the copied text is pasted; the prompt stays saved).
+        val switchApPrompt: MaterialSwitch = findViewById(R.id.switchAutoPastePrompt)
+        val editApPrompt: EditText = findViewById(R.id.editAutoPastePrompt)
+        val textApHint: TextView = findViewById(R.id.textAutoPastePromptHint)
+        fun refreshApHint() {
+            val on = prefs.autoPastePromptEnabled
+            textApHint.text = if (on) "ON: your prompt, a blank line, then the copied text are pasted and sent."
+            else "OFF: only the copied text is pasted. Your prompt stays saved."
+            editApPrompt.alpha = if (on) 1f else 0.5f
+        }
+        editApPrompt.setText(prefs.autoPastePrompt)
+        switchApPrompt.isChecked = prefs.autoPastePromptEnabled
+        refreshApHint()
+        editApPrompt.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { prefs.autoPastePrompt = s?.toString() ?: "" }
+        })
+        switchApPrompt.setOnCheckedChangeListener { _, checked ->
+            prefs.autoPastePromptEnabled = checked
+            refreshApHint()
+        }
         findViewById<MaterialButton>(R.id.btnPasteDebug).setOnClickListener {
             val cm = getSystemService(android.content.ClipboardManager::class.java)
             cm.setPrimaryClip(android.content.ClipData.newPlainText("paste debug", PasteSender.readLog(this)))
@@ -327,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var editGptPrompt: EditText
     private lateinit var switchGptPrompt: MaterialSwitch
     private lateinit var switchGptSend: MaterialSwitch
+    private lateinit var switchGptFloat: MaterialSwitch
     private var gptSuppress = false
 
     private fun setupGpt(switchGesture: MaterialSwitch) {
@@ -334,6 +357,12 @@ class MainActivity : AppCompatActivity() {
         layoutGpt = findViewById(R.id.layoutGpt)
         textGptHint = findViewById(R.id.textGptHint)
         switchGptCapture = findViewById(R.id.switchGptCapture)
+        switchGptFloat = findViewById(R.id.switchGptFloat)
+        switchGptFloat.isChecked = prefs.gptFloating
+        switchGptFloat.setOnCheckedChangeListener { _, checked ->
+            prefs.gptFloating = checked
+            renderShortcuts()
+        }
         switchGptPaste = findViewById(R.id.switchGptPaste)
         textGptCapture = findViewById(R.id.textGptCapture)
         layoutGptCapture = findViewById(R.id.layoutGptCapture)
@@ -394,7 +423,7 @@ class MainActivity : AppCompatActivity() {
         switchGptPaste.visibility = if (cap) View.GONE else View.VISIBLE
         (switchGptPaste.parent as? View)?.visibility = if (cap) View.GONE else View.VISIBLE
         textGptCapture.text = if (cap) "ON: the handle captures the screen (or your saved area) and shares it to ChatGPT."
-        else "OFF: no screenshot. The handle only opens ChatGPT in a floating window."
+        else "OFF: no screenshot. The handle only opens ChatGPT (floating or full screen, as you chose)."
         editGptPrompt.alpha = if (prefs.gptPromptEnabled) 1f else 0.5f
         layoutGpt.visibility = if (on) View.VISIBLE else View.GONE
         textGptHint.text = if (on) {
@@ -653,7 +682,7 @@ class MainActivity : AppCompatActivity() {
         shortcutList.removeAllViews()
         val inflater = LayoutInflater.from(this)
 
-        fun row(icon: Drawable?, label: String, sub: String, color: Int, onColor: (Int) -> Unit, onDelete: (() -> Unit)?, iconRes: Int = R.drawable.ic_search) {
+        fun row(icon: Drawable?, label: String, sub: String, color: Int, onColor: (Int) -> Unit, onDelete: (() -> Unit)?, iconRes: Int = R.drawable.ic_search, floating: Boolean? = null, onFloating: ((Boolean) -> Unit)? = null) {
             val v = inflater.inflate(R.layout.item_shortcut, shortcutList, false)
             val iconView: ImageView = v.findViewById(R.id.rowIcon)
             if (icon != null) iconView.setImageDrawable(icon)
@@ -675,18 +704,29 @@ class MainActivity : AppCompatActivity() {
             }
             val del: ImageButton = v.findViewById(R.id.rowDelete)
             if (onDelete == null) del.visibility = View.INVISIBLE else del.setOnClickListener { onDelete() }
+            val floatSwitch: MaterialSwitch = v.findViewById(R.id.rowFloat)
+            if (floating != null && onFloating != null) {
+                floatSwitch.visibility = View.VISIBLE
+                floatSwitch.isChecked = floating
+                floatSwitch.setOnCheckedChangeListener { _, checked ->
+                    onFloating(checked)
+                    renderShortcuts()
+                }
+            }
             shortcutList.addView(v)
         }
 
         row(
-            null, "Circle Search", "Default handle - lasso or saved area",
-            prefs.searchHandleColor, { prefs.searchHandleColor = it }, null
+            null, "Circle Search", if (prefs.lensFloating) "Default handle - Lens in a floating window" else "Default handle - Lens opens full screen",
+            prefs.searchHandleColor, { prefs.searchHandleColor = it }, null,
+            floating = prefs.lensFloating, onFloating = { prefs.lensFloating = it }
         )
         if (prefs.gptEnabled) {
             val gptIcon = try { packageManager.getApplicationIcon(ChatGptLauncher.PACKAGE) } catch (_: Throwable) { null }
             row(
                 gptIcon, "ChatGPT", "Screenshot + prompt to the ChatGPT app",
-                prefs.gptHandleColor, { prefs.gptHandleColor = it }, null
+                prefs.gptHandleColor, { prefs.gptHandleColor = it }, null,
+                floating = prefs.gptFloating, onFloating = { prefs.gptFloating = it }
             )
         }
         if (prefs.shotEnabled) {
@@ -705,9 +745,10 @@ class MainActivity : AppCompatActivity() {
         for (s in list) {
             val icon = try { packageManager.getApplicationIcon(s.packageName) } catch (_: Throwable) { null }
             row(
-                icon, s.label, "Opens in a floating window", s.color,
+                icon, s.label, if (s.floating) "Opens in a floating window" else "Opens full screen", s.color,
                 { prefs.setShortcutColor(s.id, it) },
-                { removeShortcut(s) }
+                { removeShortcut(s) },
+                floating = s.floating, onFloating = { prefs.setShortcutFloating(s.id, it) }
             )
         }
         textShortcutCount.text = "${list.size} / ${Prefs.MAX_SHORTCUTS} apps"

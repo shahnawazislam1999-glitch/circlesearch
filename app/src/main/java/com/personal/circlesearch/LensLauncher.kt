@@ -24,7 +24,7 @@ object LensLauncher {
     )
 
     @Suppress("DEPRECATION")
-    fun launch(context: Context, imageFile: File, bounds: Rect, prompt: String? = null): Boolean {
+    fun launch(context: Context, imageFile: File, bounds: Rect, prompt: String? = null, floating: Boolean = true): Boolean {
         val uri = try {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", imageFile)
         } catch (_: Exception) {
@@ -62,12 +62,23 @@ object LensLauncher {
                 context.grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: Exception) {
             }
-            if (start(context, intent, bounds)) return true
+            if (start(context, intent, if (floating) bounds else null)) return true
         }
         return false
     }
 
-    internal fun start(context: Context, intent: Intent, bounds: Rect): Boolean {
+    /** [bounds] == null -> plain full-screen launch (floating window switched off). */
+    internal fun start(context: Context, intent: Intent, bounds: Rect?): Boolean {
+        if (bounds == null) {
+            return try {
+                context.startActivity(intent)
+                true
+            } catch (_: ActivityNotFoundException) {
+                false
+            } catch (_: Exception) {
+                false
+            }
+        }
         val base: Bundle = ActivityOptions.makeBasic().setLaunchBounds(bounds).toBundle() ?: Bundle()
         // Best effort: ask for a freeform window. Ignored by the system when unsupported.
         val freeform = Bundle(base).apply { putInt("android.activity.windowingMode", 5) }

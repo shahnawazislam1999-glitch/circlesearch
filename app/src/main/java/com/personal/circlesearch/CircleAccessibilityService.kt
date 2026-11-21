@@ -271,8 +271,8 @@ class CircleAccessibilityService : AccessibilityService() {
 
     /** Capture off: no screenshot, just open ChatGPT in a floating window (optionally paste the clipboard). */
     private fun openGptOnly() {
-        val ok = AppLauncher.launchFloating(this, ChatGptLauncher.PACKAGE, floatingBounds())
-        if (ok && prefs.gptPasteClipboard) GptFiller(this, main).runPaste()
+        val ok = AppLauncher.launchFloating(this, ChatGptLauncher.PACKAGE, floatingBounds(), prefs.gptFloating)
+        if (ok && prefs.gptPasteClipboard) GptFiller(this, main).runPaste(prefs.activeAutoPastePrompt())
     }
 
     /** Freezes the screen so the user can drag out the ChatGPT area to save. */
@@ -292,8 +292,10 @@ class CircleAccessibilityService : AccessibilityService() {
             prefs.removeShortcut(shortcut.id)
             return
         }
-        val ok = AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds())
-        if (ok && prefs.autoPaste) GptFiller(this, main, shortcut.packageName).runPaste()
+        // Re-read from prefs so a just-changed floating switch always wins.
+        val floating = prefs.shortcuts().firstOrNull { it.id == shortcut.id }?.floating ?: shortcut.floating
+        val ok = AppLauncher.launchFloating(this, shortcut.packageName, floatingBounds(), floating)
+        if (ok && prefs.autoPaste) GptFiller(this, main, shortcut.packageName).runPaste(prefs.activeAutoPastePrompt())
     }
 
     /** Freezes the screen and lets the user drag out the area to save. */
@@ -511,7 +513,7 @@ class CircleAccessibilityService : AccessibilityService() {
         val prompt = prefs.activePrompt()
         if (prompt != null) copyPromptToClipboard(prompt)
         if (mode == Prefs.LENS_APP && file != null) {
-            viaApp = LensLauncher.launch(this, file, floatingBounds(), prompt)
+            viaApp = LensLauncher.launch(this, file, floatingBounds(), prompt, prefs.lensFloating)
         }
         if (viaApp && prompt != null) {
             // PROMPT_SEARCH: type the prompt into Lens' "Ask about this image" box.
@@ -528,7 +530,7 @@ class CircleAccessibilityService : AccessibilityService() {
         if (!busy) return
         val prompt = prefs.activeGptPrompt()
         if (prompt != null) copyPromptToClipboard(prompt)
-        val ok = file != null && ChatGptLauncher.launch(this, file, floatingBounds(), prompt)
+        val ok = file != null && ChatGptLauncher.launch(this, file, floatingBounds(), prompt, prefs.gptFloating)
         if (ok) {
             GptFiller(this, main).run(prompt, prefs.gptAutoSend)
         } else {

@@ -24,7 +24,8 @@ import java.io.File
 class PasteSender(
     private val service: AccessibilityService,
     private val handler: Handler,
-    private val pkg: String
+    private val pkg: String,
+    private val prompt: String? = null
 ) {
     private enum class Phase { PASTE, SEND }
 
@@ -42,7 +43,7 @@ class PasteSender(
     fun start() {
         current?.cancel()
         current = this
-        clip = readClip()
+        clip = buildText(readClip(), prompt)
         note("start pkg=$pkg clipLen=${clip?.length ?: -1}")
         handler.postDelayed({ step() }, FIRST_DELAY_MS)
     }
@@ -307,6 +308,27 @@ class PasteSender(
         listOfNotNull(n.contentDescription?.toString(), n.text?.toString(), n.hintText?.toString(), n.viewIdResourceName)
             .joinToString(" ")
 
+    /**
+     * prompt + blank line + copied text. The result is also put on the clipboard so the PASTE action
+     * pastes the whole thing. If the clipboard already holds our own previous result (nothing new was
+     * copied) the prompt is not added a second time.
+     */
+    private fun buildText(copied: String?, prompt: String?): String? {
+        if (prompt == null) return copied
+        val combined = when {
+            copied == null -> prompt
+            copied == lastCombined -> copied
+            else -> prompt + "\n\n" + copied
+        }
+        try {
+            val cm = service.getSystemService(ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Circle Search paste", combined))
+            lastCombined = combined
+        } catch (_: Throwable) {
+        }
+        return combined
+    }
+
     private fun readClip(): String? = try {
         val cm = service.getSystemService(ClipboardManager::class.java)
         cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(service)?.toString()
@@ -352,6 +374,9 @@ class PasteSender(
 
         @Volatile
         private var current: PasteSender? = null
+
+        @Volatile
+        private var lastCombined: String? = null
 
         fun readLog(ctx: android.content.Context): String =
             try { File(ctx.filesDir, LOG_FILE).readText() } catch (_: Throwable) { "No log yet - run an auto paste first." }
