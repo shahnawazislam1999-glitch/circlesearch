@@ -38,7 +38,8 @@ data class Item(
     var sx: Float = 0f,          // position + size on the sticky board (board units = dp)
     var sy: Float = 0f,
     var sw: Float = 0f,
-    var sh: Float = 0f
+    var sh: Float = 0f,
+    var fav: Boolean = false     // saved to "Favourites" for easy access
 )
 
 /** All data lives here. Every list mutation happens on the main thread. */
@@ -160,7 +161,8 @@ object Store {
                         x.optDouble("sx", 0.0).toFloat(),
                         x.optDouble("sy", 0.0).toFloat(),
                         x.optDouble("sw", 0.0).toFloat(),
-                        x.optDouble("sh", 0.0).toFloat()
+                        x.optDouble("sh", 0.0).toFloat(),
+                        x.optBoolean("fav", false)
                     )
                 )
             }
@@ -179,6 +181,7 @@ object Store {
                     .put("uses", it.uses).put("created", it.created)
                     .put("col", it.color).put("sx", it.sx.toDouble()).put("sy", it.sy.toDouble())
                     .put("sw", it.sw.toDouble()).put("sh", it.sh.toDouble())
+                    .put("fav", it.fav)
             )
         }
         return JSONObject().put("app", "PinClip").put("version", 1).put("groups", ga).put("items", ia).toString()
@@ -241,6 +244,7 @@ object Store {
 
     fun update(i: Item, text: String, group: String?) { i.text = text; i.groupId = group; save(); notifyChange() }
     fun togglePin(i: Item) { i.pinned = !i.pinned; save(); notifyChange() }
+    fun toggleFav(i: Item) { i.fav = !i.fav; save(); notifyChange() }
     fun touch(i: Item) { i.uses++; save(); notifyChange() }
     fun setGroup(i: Item, g: String?) { i.groupId = g; save(); notifyChange() }
 

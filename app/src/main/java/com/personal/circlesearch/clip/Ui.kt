@@ -6,10 +6,13 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
+import kotlin.math.max
 
 const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -103,4 +106,81 @@ fun Context.ovalDot(color: Int, ringColor: Int?): GradientDrawable {
     g.setColor(color)
     if (ringColor != null) g.setStroke(dp(2), ringColor)
     return g
+}
+
+/** Small icon + text button used by the long-press action bars and the ⋮ menu. */
+fun Context.actionBtn(res: Int, text: String, fg: Int = C.TEXT, bg: Int = C.CARD2): LinearLayout {
+    val r = LinearLayout(this)
+    r.orientation = LinearLayout.HORIZONTAL
+    r.gravity = Gravity.CENTER_VERTICAL
+    r.setPadding(dp(9), dp(6), dp(11), dp(6))
+    r.background = rounded(bg, 14)
+    val ic = ImageView(this)
+    ic.setImageResource(res)
+    ic.setColorFilter(fg)
+    r.addView(ic, LinearLayout.LayoutParams(dp(15), dp(15)))
+    val t = label(text, 12f, fg)
+    t.maxLines = 1
+    t.setPadding(dp(5), 0, 0, 0)
+    r.addView(t)
+    return r
+}
+
+/** Small grey caption that starts a section of the ⋮ menu. */
+fun Context.sectionLabel(t: String): TextView {
+    val v = label(t.uppercase(), 10f, C.SUB)
+    v.letterSpacing = 0.08f
+    v.setPadding(dp(4), dp(10), dp(4), dp(4))
+    return v
+}
+
+/** Lays children out left to right and wraps to a new line when the row is full. */
+class FlowLayout(ctx: Context, private val hGap: Int, private val vGap: Int) : ViewGroup(ctx) {
+    override fun onMeasure(wSpec: Int, hSpec: Int) {
+        val maxW = MeasureSpec.getSize(wSpec) - paddingLeft - paddingRight
+        var x = 0
+        var y = 0
+        var rowH = 0
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c.visibility == View.GONE) continue
+            val lp = c.layoutParams
+            val ws = if (lp != null && lp.width >= 0) MeasureSpec.makeMeasureSpec(lp.width, MeasureSpec.EXACTLY)
+            else MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.AT_MOST)
+            val hs = if (lp != null && lp.height >= 0) MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY)
+            else MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            c.measure(ws, hs)
+            val cw = c.measuredWidth
+            val ch = c.measuredHeight
+            if (x > 0 && x + cw > maxW) { x = 0; y += rowH + vGap; rowH = 0 }
+            x += cw + hGap
+            rowH = max(rowH, ch)
+        }
+        val h = y + rowH + paddingTop + paddingBottom
+        setMeasuredDimension(MeasureSpec.getSize(wSpec), resolveSize(h, hSpec))
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val maxW = r - l - paddingLeft - paddingRight
+        var x = 0
+        var y = 0
+        var rowH = 0
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c.visibility == View.GONE) continue
+            val cw = c.measuredWidth
+            val ch = c.measuredHeight
+            if (x > 0 && x + cw > maxW) { x = 0; y += rowH + vGap; rowH = 0 }
+            c.layout(paddingLeft + x, paddingTop + y, paddingLeft + x + cw, paddingTop + y + ch)
+            x += cw + hGap
+            rowH = max(rowH, ch)
+        }
+    }
+}
+
+/** A ScrollView that never grows taller than [maxH] pixels (used for the ⋮ menu). */
+class MaxHeightScroll(ctx: Context, var maxH: Int) : ScrollView(ctx) {
+    override fun onMeasure(wSpec: Int, hSpec: Int) {
+        super.onMeasure(wSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST))
+    }
 }

@@ -83,3 +83,22 @@ Handles are now a 2 dp hairline hugging the screen edge, with a small gap betwee
   The fit icon shows everything. The window itself still moves/resizes freely.
 - Everything is remembered: sticky mode on/off, board position + zoom, tool/colour/size, last group filter, note positions,
   drawing (board.json). Backup (zip) now contains the notes layout, colours and the drawing; restore brings them back.
+
+## Clipboard v6: clean header, long-press actions, pan lock, Reading mode, Favourites, real full screen
+- **Clean list**: cards show only their text. Tap = paste. **Press and hold** a card and an action bar opens right under it:
+  Pin / Favourite / Edit / Copy / Expand / Select / Delete. Tap the card again (or anywhere) to close it.
+- **Everything that sat above the cards is now in the ⋮ menu**: the list switcher (All, Favourites, Pinned, Top used, your
+  groups, + Group), Paste all + Join, and in sticky note view the board tools (move / pan / pen / eraser, undo, colours, sizes,
+  fit all). The header title shows which list you are in with a card count; tap it to open the menu.
+- **Favourites**: press and hold a card or sticky note -> Favourite. Open them from ⋮ -> Show -> Favourites. Favourite notes
+  wear a small gold star on the board; list cards show a star next to the pin.
+- **Pan only (sticky note view)**: the hand button in the header (or ⋮ -> Board tools -> Pan only) locks the cards. One finger
+  slides the canvas even when it starts on a note, two fingers pinch-zoom, tap still selects. Tap the button again to move
+  cards again. While the pen is active a small Undo / Done pill appears at the bottom.
+- **Sticky note long press**: press and hold a note and its action bar floats at the bottom of the board
+  (Paste / Copy / Edit / Colour / Pin / Favourite / Delete). Tap empty canvas to close it.
+- **Reading mode** (⋮ -> View -> Reading mode) now works on the board too: every note grows to show all of its text and pushes
+  the notes below it down so nothing overlaps. Positions are never changed - switch it off and the board is exactly as you left
+  it. Moving cards and drawing are paused while it is on.
+- **Full screen** now really is full screen: the window starts at the very top, covers the status bar / notification icons and
+  only keeps clear of the camera cut-out and navigation bar.
