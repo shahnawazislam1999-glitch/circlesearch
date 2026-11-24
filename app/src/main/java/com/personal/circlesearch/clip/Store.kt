@@ -33,7 +33,12 @@ data class Item(
     var groupId: String?,
     var pinned: Boolean,
     var uses: Int,
-    var created: Long
+    var created: Long,
+    var color: Int = 0,          // sticky-note colour (0 = not assigned yet)
+    var sx: Float = 0f,          // position + size on the sticky board (board units = dp)
+    var sy: Float = 0f,
+    var sw: Float = 0f,
+    var sh: Float = 0f
 )
 
 /** All data lives here. Every list mutation happens on the main thread. */
@@ -54,9 +59,72 @@ object Store {
         val s = prefs.getString("data", null)
         if (s != null) parse(s, groups, items)
         inited = true
+        if (assignMissingColors()) save()
     }
 
     private fun notifyChange() { onChange?.invoke() }
+
+    // ───────────── sticky colours + board layout ─────────────
+
+    fun nextColor(): Int {
+        val idx = prefs.getInt("cidx", 0)
+        prefs.edit().putInt("cidx", idx + 1).apply()
+        return PALETTE[idx % PALETTE.size]
+    }
+
+    /** Gives every card without a colour the next colour in the palette (oldest first). Returns true if anything changed. */
+    fun assignMissingColors(): Boolean {
+        val missing = items.filter { it.color == 0 }.sortedBy { it.created }
+        missing.forEach { it.color = nextColor() }
+        return missing.isNotEmpty()
+    }
+
+    fun setColor(i: Item, c: Int) { i.color = c; save(); notifyChange() }
+
+    fun saveLayout() = save()
+
+    fun bringToFront(i: Item) {
+        if (items.lastOrNull() === i) return
+        items.remove(i)
+        items.add(i)
+        save()
+    }
+
+    private fun imgAspect(i: Item): Float {
+        return try {
+            val bo = BitmapFactory.Options()
+            bo.inJustDecodeBounds = true
+            BitmapFactory.decodeFile(imageFile(i).path, bo)
+            if (bo.outWidth > 0) bo.outHeight.toFloat() / bo.outWidth else 0.75f
+        } catch (e: Exception) { 0.75f }
+    }
+
+    /** Places every card that has no spot on the board yet (newest first, in three columns). No change callback. */
+    fun ensureLayout() {
+        if (items.none { it.sw <= 0f }) return
+        val colW = 176f
+        val cols = 3
+        val bottoms = FloatArray(cols) { 12f }
+        items.filter { it.sw > 0f }.forEach {
+            val c = Math.round((it.sx - 12f) / colW).coerceIn(0, cols - 1)
+            bottoms[c] = maxOf(bottoms[c], it.sy + it.sh + 12f)
+        }
+        items.filter { it.sw <= 0f }.sortedByDescending { it.created }.forEach {
+            var c = 0
+            for (k in 1 until cols) if (bottoms[k] < bottoms[c]) c = k
+            it.sw = 164f
+            it.sh = if (it.image != null) {
+                (164f * imgAspect(it) + 12f + (if (it.text.isNotBlank()) 30f else 0f)).coerceIn(90f, 360f)
+            } else {
+                val lines = it.text.split("\n").sumOf { ln -> maxOf(1, Math.ceil(ln.length / 22.0).toInt()) }
+                (22f + lines * 17f).coerceIn(90f, 240f)
+            }
+            it.sx = 12f + c * colW
+            it.sy = bottoms[c]
+            bottoms[c] += it.sh + 12f
+        }
+        save()
+    }
 
     fun imageFile(i: Item) = File(app.filesDir, "img/" + i.image)
     fun thumb(i: Item) = File(app.filesDir, "img/" + i.id + ".jpg")
@@ -87,7 +155,12 @@ object Store {
                         x.optString("group", "").ifEmpty { null },
                         x.optBoolean("pinned", false),
                         x.optInt("uses", 0),
-                        x.optLong("created", 0L)
+                        x.optLong("created", 0L),
+                        x.optInt("col", 0),
+                        x.optDouble("sx", 0.0).toFloat(),
+                        x.optDouble("sy", 0.0).toFloat(),
+                        x.optDouble("sw", 0.0).toFloat(),
+                        x.optDouble("sh", 0.0).toFloat()
                     )
                 )
             }
@@ -104,6 +177,8 @@ object Store {
                 JSONObject().put("id", it.id).put("text", it.text).put("image", it.image ?: "")
                     .put("group", it.groupId ?: "").put("pinned", it.pinned)
                     .put("uses", it.uses).put("created", it.created)
+                    .put("col", it.color).put("sx", it.sx.toDouble()).put("sy", it.sy.toDouble())
+                    .put("sw", it.sw.toDouble()).put("sh", it.sh.toDouble())
             )
         }
         return JSONObject().put("app", "PinClip").put("version", 1).put("groups", ga).put("items", ia).toString()
@@ -119,7 +194,7 @@ object Store {
             save(); notifyChange()
             return false
         }
-        items.add(Item(UUID.randomUUID().toString(), text, null, group, false, 0, System.currentTimeMillis()))
+        items.add(Item(UUID.randomUUID().toString(), text, null, group, false, 0, System.currentTimeMillis(), nextColor()))
         save(); notifyChange()
         return true
     }
@@ -156,7 +231,7 @@ object Store {
             if (bo.outWidth <= 0) { f.delete(); return }
             makeThumb(f, id)
             main.post {
-                items.add(Item(id, "", name, group, false, 0, System.currentTimeMillis()))
+                items.add(Item(id, "", name, group, false, 0, System.currentTimeMillis(), nextColor()))
                 save(); notifyChange()
                 
             }
@@ -171,7 +246,7 @@ object Store {
 
     fun delete(i: Item) {
         items.remove(i)
-        if (i.image != null) { imageFile(i).delete(); thumb(i).delete() }
+        if (i.image != null) { imageFile(i).delete(); thumb(i).delete(); ImgCache.drop(i.id) }
         save(); notifyChange()
     }
 
@@ -246,6 +321,15 @@ object Store {
             z.putNextEntry(ZipEntry("data.json"))
             z.write(js.toByteArray(Charsets.UTF_8))
             z.closeEntry()
+            try {
+                val bf = BoardStore.file()
+                if (bf.exists()) {
+                    z.putNextEntry(ZipEntry("board.json"))
+                    z.write(bf.readBytes())
+                    z.closeEntry()
+                }
+            } catch (e: Exception) {
+            }
             for ((n, f) in imgs) {
                 z.putNextEntry(ZipEntry("img/$n"))
                 f.inputStream().use { it.copyTo(z) }
@@ -260,6 +344,7 @@ object Store {
             val dir = File(app.filesDir, "img")
             dir.mkdirs()
             var js: String? = null
+            var boardJs: String? = null
             ZipInputStream(inp).use { z ->
                 var e = z.nextEntry
                 while (e != null) {
@@ -267,6 +352,8 @@ object Store {
                     if (!e.isDirectory) {
                         if (n == "data.json") {
                             js = z.readBytes().toString(Charsets.UTF_8)
+                        } else if (n == "board.json") {
+                            boardJs = z.readBytes().toString(Charsets.UTF_8)
                         } else if (n.startsWith("img/")) {
                             val fn = File(n).name
                             if (fn.isNotEmpty()) File(dir, fn).outputStream().use { o -> z.copyTo(o) }
@@ -282,7 +369,17 @@ object Store {
             val its = ArrayList<Item>()
             parse(text, gs, its)
             its.filter { it.image != null }.forEach { makeThumb(File(dir, it.image!!), it.id) }
+            val bj = boardJs
+            if (bj != null) {
+                try {
+                    val bf = BoardStore.file()
+                    val old = if (!replace && bf.exists()) bf.readText() else null
+                    bf.writeText(if (old == null) bj else BoardStore.mergeText(old, bj))
+                } catch (e: Exception) {
+                }
+            }
             main.post {
+                if (bj != null) BoardStore.reload()
                 if (replace) {
                     items.filter { old -> old.image != null && its.none { n -> n.id == old.id } }
                         .forEach { old -> imageFile(old).delete(); thumb(old).delete() }
@@ -297,6 +394,7 @@ object Store {
                         c++
                     }
                 }
+                assignMissingColors()
                 save(); notifyChange()
                 done(c)
             }

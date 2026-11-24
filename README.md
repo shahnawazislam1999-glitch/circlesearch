@@ -69,3 +69,17 @@ Tap it and the screenshot is shared to the real ChatGPT app together with the pr
 
 ## Handle look
 Handles are now a 2 dp hairline hugging the screen edge, with a small gap between handles and a faint shadow so light colours stay visible on white screens. Touch area is still 24 dp wide. Default opacity is 85%.
+
+## Clipboard v5: colours, ⋮ menu, full images, Sticky note (Canva) view
+- Every card has its own pastel colour (change it in the card editor). Old cards were coloured automatically.
+- Header is now just: back, pin, title, **+** and **⋮**. Search, Reading mode, Select multiple, Add image, Full screen and
+  **Sticky note view** are inside the ⋮ menu.
+- Image cards show the whole picture (never cropped, full quality). The expand icon on an image card opens a zoom viewer
+  (pinch, drag, double-tap, Fit / 100% actual pixels).
+- **Sticky note view** (⋮ -> Sticky note view): the window becomes a Canva-style board of coloured sticky notes.
+  Group chips on top filter the notes. Hand tool: drag a note to move it, drag its blue corner dot to resize, tap it for
+  Paste / Copy / Edit / Color / Pin / Delete (double-tap pastes). Drag empty space to pan, pinch with two fingers to zoom.
+  Pencil tool: smart pen or finger writes with the floating-pen pencil (same smoothing); pick colour + stroke size, eraser, undo.
+  The fit icon shows everything. The window itself still moves/resizes freely.
+- Everything is remembered: sticky mode on/off, board position + zoom, tool/colour/size, last group filter, note positions,
+  drawing (board.json). Backup (zip) now contains the notes layout, colours and the drawing; restore brings them back.

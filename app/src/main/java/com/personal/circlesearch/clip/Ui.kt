@@ -73,3 +73,34 @@ val HANDLE_COLORS = intArrayOf(
     0xFFA855F7.toInt(), // purple
     0xFFFF5C6C.toInt()  // red
 )
+
+/** Sticky-note colours: every card gets one so neighbours are easy to tell apart. */
+val PALETTE = intArrayOf(
+    0xFFFFEE8C.toInt(), // yellow
+    0xFFFFB3CF.toInt(), // pink
+    0xFF9ED8FF.toInt(), // sky blue
+    0xFFB7F0A6.toInt(), // green
+    0xFFFFC98F.toInt(), // orange
+    0xFFD9C2FF.toInt(), // lavender
+    0xFF9AF0DA.toInt(), // mint
+    0xFFFFA9A0.toInt(), // coral
+    0xFFE4F28A.toInt(), // lime
+    0xFFA9BCFF.toInt(), // periwinkle
+    0xFFF7B8F0.toInt(), // orchid
+    0xFFFFD9A8.toInt()  // peach
+)
+
+/** Pencil colours of the board toolbar. */
+val INK_COLORS = intArrayOf(
+    0xFF1B1B1B.toInt(), 0xFF1F5BFF.toInt(), 0xFFE02B2B.toInt(), 0xFF1E9E4A.toInt(),
+    0xFFF28A00.toInt(), 0xFF8E3CF0.toInt(), 0xFF7A4A21.toInt()
+)
+val INK_SIZES = floatArrayOf(1.6f, 3f, 5f, 8f)
+
+fun Context.ovalDot(color: Int, ringColor: Int?): GradientDrawable {
+    val g = GradientDrawable()
+    g.shape = GradientDrawable.OVAL
+    g.setColor(color)
+    if (ringColor != null) g.setStroke(dp(2), ringColor)
+    return g
+}

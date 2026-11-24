@@ -16,6 +16,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.database.ContentObserver
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -93,6 +94,16 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
     private val selected = LinkedHashSet<String>()
     private var pendingDelete: String? = null
     private var sep = 0
+    private var board: StickyBoardView? = null
+    private var wrap: FrameLayout? = null
+    private var menuCard: View? = null
+    private var noteBar: HorizontalScrollView? = null
+    private var boardTools: HorizontalScrollView? = null
+    private var boardToolsRow: LinearLayout? = null
+    private var moreBtn: ImageView? = null
+    private var colorPick = false
+    private var confirmNoteDel = false
+    private fun sticky() = Store.prefs.getBoolean("sticky", false)
     private val seps = listOf("New line" to "\n", "Space" to " ", "Comma" to ", ")
 
     private val prefL = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
@@ -107,6 +118,8 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         Store.prefs.registerOnSharedPreferenceChangeListener(prefL)
         Store.onChange = { if (panel != null) renderList() }
+        val lf = Store.prefs.getString("lfilter", "all") ?: "all"
+        filter = if (lf == "all" || lf == "pinned" || lf == "used" || Store.groups.any { it.id == lf }) lf else "all"
     }
 
     /** Called when the service stops or is turned off. */
@@ -215,6 +228,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
     private fun closePanel() {
         hideKb()
         saveScroll()
+        dropBoard()
         panel?.let { try { wm.removeView(it) } catch (e: Exception) {} }
         panel = null; panelLp = null; body = null; multiBar = null; chipRow = null; actionRow = null; confirmBulk = false; searchBox = null; searchRow = null
         multi = false; editorOpen = false; selected.clear(); pendingDelete = null
@@ -306,6 +320,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
     private fun rebuildPanel() {
         hideKb()
         saveScroll()
+        dropBoard()
         panel?.let { try { wm.removeView(it) } catch (e: Exception) {} }
         panel = null; panelLp = null; body = null; multiBar = null; chipRow = null; actionRow = null
         searchBox = null; searchRow = null; editorOpen = false
@@ -333,7 +348,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         root.setPadding(pd, pd, pd, pd)
         root.elevation = dp(8).toFloat()
 
-        // header: [back] [pin grip] [title] [sideways-scrolling row of tool icons]
+        // header: [back] [pin grip] [title ......] [+] [⋮ menu]
         val head = LinearLayout(this)
         head.orientation = LinearLayout.HORIZONTAL
         head.gravity = Gravity.CENTER_VERTICAL
@@ -347,89 +362,27 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
             val title = label("PinClip", 15f)
             title.setTypeface(title.typeface, Typeface.BOLD)
             title.maxLines = 1
-            head.addView(title)
+            head.addView(title, LP(0, WRAP, 1f))
             if (!full) attachDrag(title, { panel }, { panelLp }, null) { savePanelGeometry() }
+        } else {
+            val sp = View(this)
+            head.addView(sp, LP(0, 1, 1f))
+            if (!full) attachDrag(sp, { panel }, { panelLp }, null) { savePanelGeometry() }
         }
         if (!full) attachDrag(pinIc, { panel }, { panelLp }, null) { savePanelGeometry() }
-        val hScroll = HorizontalScrollView(this)
-        hScroll.isHorizontalScrollBarEnabled = false
-        hScroll.isFillViewport = true
-        val icons = LinearLayout(this)
-        icons.orientation = LinearLayout.HORIZONTAL
-        icons.gravity = Gravity.CENTER_VERTICAL or Gravity.END
-        hScroll.addView(icons, FrameLayout.LayoutParams(WRAP, WRAP))
-        head.addView(hScroll, LP(0, WRAP, 1f))
-
-        val searchB = ic(R.drawable.clip_ic_search, if (query.isNotEmpty()) C.ACCENT else C.SUB)
-        searchB.setOnClickListener {
-            val sr = searchRow
-            val box = searchBox
-            if (sr != null && box != null) {
-                if (sr.visibility != View.VISIBLE) {
-                    sr.visibility = View.VISIBLE
-                    searchB.setColorFilter(C.ACCENT)
-                    setFocusable(true)
-                    showKb(box)
-                } else {
-                    box.setText("")
-                    sr.visibility = View.GONE
-                    searchB.setColorFilter(C.SUB)
-                    hideKb()
-                    setFocusable(false)
-                }
-            }
-        }
-        icons.addView(searchB)
-
-        val readB = ic(R.drawable.clip_ic_read, if (Store.prefs.getBoolean("reading", false)) C.ACCENT else C.SUB)
-        readB.setOnClickListener {
-            val on = !Store.prefs.getBoolean("reading", false)
-            Store.prefs.edit().putBoolean("reading", on).apply()
-            readB.setColorFilter(if (on) C.ACCENT else C.SUB)
-            toast(if (on) "Reading mode: full text" else "Reading mode off")
-            renderList()
-        }
-        icons.addView(readB)
-
-        val multiB = ic(R.drawable.clip_ic_multi, if (multi) C.ACCENT else C.SUB)
-        multiB.setOnClickListener {
-            multi = !multi
-            selected.clear()
-            multiB.setColorFilter(if (multi) C.ACCENT else C.SUB)
-            updateMultiBar()
-            renderList()
-        }
-        icons.addView(multiB)
-
-        val imgB = ic(R.drawable.clip_ic_image, C.ACCENT)
-        imgB.setOnClickListener {
-            try {
-                val i = Intent(this, ImagePickActivity::class.java)
-                i.putExtra("group", curGroup())
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(i)
-            } catch (e: Exception) {
-                toast("Open the PinClip app and tap Add images")
-            }
-        }
-        icons.addView(imgB)
 
         val addB = ic(R.drawable.clip_ic_add, C.ACCENT)
         addB.setOnClickListener {
+            hideMenu()
             showEditor("New text", "", curGroup(), true, false, null) { t, g ->
                 Store.addText(t, g)
             }
         }
-        icons.addView(addB)
-
-        // small full-screen toggle, far right
-        val fsB = iconView(if (full) R.drawable.clip_ic_fullscreen_exit else R.drawable.clip_ic_fullscreen, if (full) C.ACCENT else C.SUB, 12, 3)
-        fsB.setOnClickListener {
-            saveScroll()
-            Store.prefs.edit().putBoolean("pfull", !full).apply()
-            rebuildPanel()
-        }
-        head.addView(fsB, LP(WRAP, WRAP).apply { leftMargin = dp(2) })
+        head.addView(addB)
+        val moreB = ic(R.drawable.clip_ic_more, if (sticky()) C.ACCENT else C.SUB)
+        moreB.setOnClickListener { if (menuCard != null) hideMenu() else showMenu() }
+        head.addView(moreB)
+        moreBtn = moreB
 
         // drag handle across the whole top edge (grab anywhere here to move the window)
         val handle = FrameLayout(this)
@@ -442,6 +395,13 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
             attachDrag(handle, { panel }, { panelLp }, null) { savePanelGeometry() }
         }
         root.addView(head, LP(MATCH, WRAP))
+
+        // everything under the header lives in [wrap] so the ⋮ menu and the note bar can float over it
+        val wrapV = FrameLayout(this)
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        wrapV.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
+        wrap = wrapV
 
         // search box: hidden until the search button is tapped
         val sRow = LinearLayout(this)
@@ -476,7 +436,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         searchBox = et
         searchRow = sRow
         sRow.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
-        root.addView(sRow, LP(MATCH, dp(32)).apply { topMargin = gp() })
+        col.addView(sRow, LP(MATCH, dp(32)).apply { topMargin = gp() })
 
         // chips
         val hs = HorizontalScrollView(this)
@@ -485,7 +445,19 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         row.orientation = LinearLayout.HORIZONTAL
         hs.addView(row)
         chipRow = row
-        root.addView(hs, LP(MATCH, WRAP).apply { topMargin = gp() })
+        col.addView(hs, LP(MATCH, WRAP).apply { topMargin = gp() })
+
+        // sticky-board tools (hand / pencil / eraser / undo / colours / sizes), only in sticky note view
+        val bt = HorizontalScrollView(this)
+        bt.isHorizontalScrollBarEnabled = false
+        bt.visibility = View.GONE
+        val btRow = LinearLayout(this)
+        btRow.orientation = LinearLayout.HORIZONTAL
+        btRow.gravity = Gravity.CENTER_VERTICAL
+        bt.addView(btRow, FrameLayout.LayoutParams(WRAP, WRAP))
+        boardTools = bt
+        boardToolsRow = btRow
+        col.addView(bt, LP(MATCH, WRAP).apply { topMargin = gp() })
 
         // paste-all row (scrolls sideways in a tiny window)
         val ar = LinearLayout(this)
@@ -496,19 +468,33 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         ahs.visibility = View.GONE
         ahs.addView(ar, FrameLayout.LayoutParams(WRAP, WRAP))
         actionRow = ar
-        root.addView(ahs, LP(MATCH, WRAP).apply { topMargin = gp() })
+        col.addView(ahs, LP(MATCH, WRAP).apply { topMargin = gp() })
 
         // body
         val b = FrameLayout(this)
         body = b
-        root.addView(b, LP(MATCH, 0, 1f).apply { topMargin = gp() })
+        col.addView(b, LP(MATCH, 0, 1f).apply { topMargin = gp() })
 
         // multi bar
         val mb = LinearLayout(this)
         mb.orientation = LinearLayout.VERTICAL
         mb.visibility = View.GONE
         multiBar = mb
-        root.addView(mb, LP(MATCH, WRAP).apply { topMargin = gp() })
+        col.addView(mb, LP(MATCH, WRAP).apply { topMargin = gp() })
+
+        // floating action bar for the selected sticky note
+        val nb = HorizontalScrollView(this)
+        nb.isHorizontalScrollBarEnabled = false
+        nb.visibility = View.GONE
+        nb.background = rounded(0xEE151922.toInt(), 16)
+        nb.setPadding(dp(6), dp(5), dp(6), dp(5))
+        val nbRow = LinearLayout(this)
+        nbRow.orientation = LinearLayout.HORIZONTAL
+        nbRow.gravity = Gravity.CENTER_VERTICAL
+        nb.addView(nbRow, FrameLayout.LayoutParams(WRAP, WRAP))
+        noteBar = nb
+        wrapV.addView(nb, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(6) })
+        root.addView(wrapV, LP(MATCH, 0, 1f))
 
         // resize grip (bottom-right): drag to make the window bigger or smaller
         val gripRow = LinearLayout(this)
@@ -536,8 +522,8 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         applyPanelAlpha()
 
         renderChips()
-        renderList()
         updateMultiBar()
+        applyStickyUi()
     }
 
     private fun attachResize(grip: View) {
@@ -578,6 +564,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
                 if (filter != key) {
                     saveScroll()
                     filter = key
+                    Store.prefs.edit().putString("lfilter", key).apply()
                     if (!editorOpen) body?.removeAllViews()   // so the new tab restores ITS own saved position
                     renderChips()
                     renderList()
@@ -632,6 +619,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         val list = filtered()
         updateActionRow(list)
         if (editorOpen) return
+        if (sticky()) { renderBoard(list); return }
         // remember where the user was so a paste/refresh doesn't jump back to the top
         val oldScroll = if (resetScroll) 0 else ((b.getChildAt(0) as? ScrollView)?.scrollY ?: scrollMap[filter] ?: 0)
         scrollMap[filter] = oldScroll
@@ -659,6 +647,16 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         }
     }
 
+    private val INK_DARK = 0xFF1E2128.toInt()
+    private val INK_SUB = 0xFF4A4F5C.toInt()
+    private val ICON_DARK = 0xFF3B3F4A.toInt()
+
+    private fun cardBg(fill: Int, stroke: Int?): GradientDrawable {
+        val g = rounded(fill, 12)
+        if (stroke != null) g.setStroke(dp(3), stroke)
+        return g
+    }
+
     private fun card(x: Item): View {
         val sel = selected.contains(x.id)
         val pend = pendingDelete == x.id
@@ -666,9 +664,10 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
         row.setPadding(dp(3), dp(4), dp(3), dp(4))
-        row.background = rounded(if (pend) 0xFF4A2630.toInt() else if (sel) 0xFF2E3A66.toInt() else C.CARD, 12)
+        val tone = if (x.color != 0) x.color else C.CARD
+        row.background = if (pend) cardBg(0xFFFF9AA2.toInt(), null) else cardBg(tone, if (sel) 0xFF3B5BFF.toInt() else null)
 
-        val pin = ic(R.drawable.clip_ic_pin, if (x.pinned) C.AMBER else C.SUB)
+        val pin = ic(R.drawable.clip_ic_pin, if (x.pinned) 0xFFD9480F.toInt() else ICON_DARK)
         pin.setOnClickListener { Store.togglePin(x) }
         row.addView(pin)
 
@@ -676,22 +675,26 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         mid.orientation = LinearLayout.VERTICAL
         mid.setPadding(dp(4), 0, dp(4), 0)
         if (x.image != null) {
+            // full picture, never cropped; decoded at full quality (tap the expand icon to zoom to actual size)
             val iv = ImageView(this)
             iv.adjustViewBounds = true
-            iv.scaleType = ImageView.ScaleType.CENTER_CROP
-            iv.maxHeight = if (x.id in expanded) dp(600) else dp(110)
-            val tf = Store.thumb(x)
-            if (tf.exists()) iv.setImageBitmap(BitmapFactory.decodeFile(tf.path))
+            iv.scaleType = ImageView.ScaleType.FIT_CENTER
+            iv.maxHeight = dp(560)
+            val f = Store.imageFile(x)
+            ImgCache.load(x.id, f, 1400, 3500) { bmp ->
+                if (bmp != null && iv.isAttachedToWindow) iv.setImageBitmap(bmp)
+                else if (bmp != null) iv.setImageBitmap(bmp)
+            }
             mid.addView(iv, LP(MATCH, WRAP))
             if (x.text.isNotBlank()) {
-                val cl = label(x.text, 12f)
+                val cl = label(x.text, 12f, INK_DARK)
                 cl.maxLines = if (x.id in expanded) Int.MAX_VALUE else 2
                 cl.ellipsize = TextUtils.TruncateAt.END
                 cl.setPadding(0, dp(4), 0, 0)
                 mid.addView(cl)
             }
         } else {
-            val t = label(x.text, if (compact) 12f else 13f)
+            val t = label(x.text, if (compact) 12f else 13f, INK_DARK)
             if (!Store.prefs.getBoolean("reading", false) && x.id !in expanded) {
                 t.maxLines = 4
                 t.ellipsize = TextUtils.TruncateAt.END
@@ -703,7 +706,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
             if (x.uses > 0) "${x.uses}×" else null,
             if (x.image != null) "image" else null
         ).joinToString(" · ")
-        if (meta.isNotEmpty()) mid.addView(label(meta, 10f, C.SUB))
+        if (meta.isNotEmpty()) mid.addView(label(meta, 10f, INK_SUB))
         row.addView(mid, LP(0, WRAP, 1f))
 
         val right = LinearLayout(this)
@@ -711,25 +714,23 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         val ia = if (compact) 14 else 16
         val ip = if (compact) 4 else 5
         val isOpen = x.id in expanded
-        val ex = iconView(if (isOpen) R.drawable.clip_ic_collapse else R.drawable.clip_ic_expand, if (isOpen) C.ACCENT else C.SUB, ia, ip)
+        val ex = if (x.image != null) iconView(R.drawable.clip_ic_fullscreen, ICON_DARK, ia, ip)
+        else iconView(if (isOpen) R.drawable.clip_ic_collapse else R.drawable.clip_ic_expand, if (isOpen) 0xFF2447D8.toInt() else ICON_DARK, ia, ip)
         ex.setOnClickListener {
-            if (!expanded.add(x.id)) expanded.remove(x.id)
-            renderList()
-        }
-        right.addView(ex)
-        val ed = iconView(R.drawable.clip_ic_edit, C.SUB, ia, ip)
-        ed.setOnClickListener {
-            if (x.image == null) {
-                showEditor("Edit text", x.text, x.groupId, true, false, null) { t, g -> Store.update(x, t, g) }
-            } else {
-                showEditor("Edit image card", x.text, x.groupId, true, false, null, true, x) { t, g -> Store.update(x, t.trim(), g) }
+            if (x.image != null) showImageViewer(x)
+            else {
+                if (!expanded.add(x.id)) expanded.remove(x.id)
+                renderList()
             }
         }
+        right.addView(ex)
+        val ed = iconView(R.drawable.clip_ic_edit, ICON_DARK, ia, ip)
+        ed.setOnClickListener { editItem(x) }
         right.addView(ed)
-        val cp = iconView(R.drawable.clip_ic_copy, C.SUB, ia, ip)
+        val cp = iconView(R.drawable.clip_ic_copy, ICON_DARK, ia, ip)
         cp.setOnClickListener { copyOnly(x) }
         right.addView(cp)
-        val del = iconView(if (pend) R.drawable.clip_ic_check else R.drawable.clip_ic_delete, if (pend) C.RED else C.SUB, ia, ip)
+        val del = iconView(if (pend) R.drawable.clip_ic_check else R.drawable.clip_ic_delete, if (pend) 0xFFB0001E.toInt() else ICON_DARK, ia, ip)
         del.setOnClickListener {
             if (pendingDelete == x.id) {
                 pendingDelete = null
@@ -766,11 +767,19 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         return row
     }
 
+    private fun editItem(x: Item) {
+        if (x.image == null) {
+            showEditor("Edit text", x.text, x.groupId, true, false, null, false, null, x) { t, g -> Store.update(x, t, g) }
+        } else {
+            showEditor("Edit image card", x.text, x.groupId, true, false, null, true, x, x) { t, g -> Store.update(x, t.trim(), g) }
+        }
+    }
+
     private fun updateActionRow(list: List<Item>) {
         val ar = actionRow ?: return
         ar.removeAllViews()
         val n = list.count { it.image == null }
-        if (editorOpen || multi || n == 0) { setActionVis(View.GONE); return }
+        if (editorOpen || multi || n == 0 || sticky()) { setActionVis(View.GONE); return }
         setActionVis(View.VISIBLE)
         val go = tiny("Paste all ($n)", C.ACCENT, Color.WHITE)
         go.setOnClickListener { pasteTexts(list) }
@@ -783,6 +792,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
     private fun updateMultiBar() {
         val bar = multiBar ?: return
         bar.removeAllViews()
+        if (sticky()) multi = false
         bar.visibility = if (multi) View.VISIBLE else View.GONE
         if (!multi) return
         val hs = HorizontalScrollView(this)
@@ -861,6 +871,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         val b = body ?: return
         editorOpen = true
         setActionVis(View.GONE)
+        noteBar?.visibility = View.GONE
         b.removeAllViews()
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
@@ -885,19 +896,295 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
         b.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
     }
 
+    // ───────────────────────── ⋮ menu ─────────────────────────
+
+    private fun hideMenu() {
+        menuCard?.let { (it.parent as? FrameLayout)?.removeView(it) }
+        menuCard = null
+    }
+
+    private fun showMenu() {
+        val w = wrap ?: return
+        hideMenu()
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.VERTICAL
+        card.background = rounded(C.CARD2, 14)
+        card.elevation = dp(10).toFloat()
+        card.setPadding(dp(4), dp(4), dp(4), dp(4))
+        fun row(res: Int, text: String, on: Boolean?, act: () -> Unit) {
+            val r = LinearLayout(this)
+            r.orientation = LinearLayout.HORIZONTAL
+            r.gravity = Gravity.CENTER_VERTICAL
+            r.setPadding(dp(6), dp(2), dp(10), dp(2))
+            r.addView(iconView(res, if (on == true) C.ACCENT else C.TEXT, 18, 5))
+            val tv = label(text, 13f, if (on == true) C.ACCENT else C.TEXT)
+            tv.setPadding(dp(4), 0, dp(10), 0)
+            r.addView(tv, LP(0, WRAP, 1f))
+            if (on != null) {
+                val st = pill(if (on) "ON" else "OFF", if (on) C.ACCENT else C.CARD, if (on) Color.WHITE else C.SUB, true)
+                r.addView(st)
+            }
+            r.setOnClickListener { hideMenu(); act() }
+            card.addView(r, LP(MATCH, WRAP))
+        }
+        row(R.drawable.clip_ic_sticky, "Sticky note view", sticky()) { toggleSticky() }
+        row(R.drawable.clip_ic_search, "Search", query.isNotEmpty()) { toggleSearch() }
+        if (!sticky()) {
+            row(R.drawable.clip_ic_read, "Reading mode", Store.prefs.getBoolean("reading", false)) {
+                Store.prefs.edit().putBoolean("reading", !Store.prefs.getBoolean("reading", false)).apply()
+                renderList()
+            }
+            row(R.drawable.clip_ic_multi, "Select multiple", multi) {
+                multi = !multi
+                selected.clear()
+                updateMultiBar()
+                renderList()
+            }
+        }
+        row(R.drawable.clip_ic_image, "Add image", null) {
+            try {
+                val i = Intent(this, ImagePickActivity::class.java)
+                i.putExtra("group", curGroup())
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(i)
+            } catch (e: Exception) {
+                toast("Open the PinClip app and tap Add images")
+            }
+        }
+        row(if (isFull()) R.drawable.clip_ic_fullscreen_exit else R.drawable.clip_ic_fullscreen, "Full screen", isFull()) {
+            saveScroll()
+            Store.prefs.edit().putBoolean("pfull", !isFull()).apply()
+            rebuildPanel()
+        }
+        w.addView(card, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.END).apply { topMargin = dp(2) })
+        menuCard = card
+    }
+
+    private fun toggleSearch() {
+        val sr = searchRow ?: return
+        val box = searchBox ?: return
+        if (sr.visibility != View.VISIBLE) {
+            sr.visibility = View.VISIBLE
+            setFocusable(true)
+            showKb(box)
+        } else {
+            box.setText("")
+            sr.visibility = View.GONE
+            hideKb()
+            setFocusable(false)
+        }
+    }
+
+    // ───────────────────────── sticky note view ─────────────────────────
+
+    private fun toggleSticky() {
+        Store.prefs.edit().putBoolean("sticky", !sticky()).apply()
+        confirmBulk = false
+        colorPick = false
+        body?.removeAllViews()
+        applyStickyUi()
+    }
+
+    private fun applyStickyUi() {
+        val on = sticky()
+        moreBtn?.setColorFilter(if (on) C.ACCENT else C.SUB)
+        boardTools?.visibility = if (on) View.VISIBLE else View.GONE
+        if (on) {
+            multi = false
+            selected.clear()
+            updateMultiBar()
+            renderBoardTools()
+        } else {
+            board?.selected = null
+        }
+        noteBar?.visibility = View.GONE
+        renderList()
+    }
+
+    private fun dropBoard() {
+        hideMenu()
+        board?.release()
+        board = null
+        wrap = null; noteBar = null; boardTools = null; boardToolsRow = null; moreBtn = null
+        colorPick = false
+    }
+
+    private fun renderBoard(list: List<Item>) {
+        val b = body ?: return
+        Store.ensureLayout()
+        var bd = board
+        if (bd == null) {
+            bd = StickyBoardView(this, object : StickyBoardView.Callbacks {
+                override fun onSelect(x: Item?) { colorPick = false; confirmNoteDel = false; updateNoteBar() }
+                override fun onPaste(x: Item) { paste(x) }
+            })
+            board = bd
+        }
+        bd.notes = list
+        if (bd.parent !== b) {
+            b.removeAllViews()
+            b.addView(bd, FrameLayout.LayoutParams(MATCH, MATCH))
+        }
+        bd.refresh()
+        updateNoteBar()
+    }
+
+    private fun renderBoardTools() {
+        val row = boardToolsRow ?: return
+        row.removeAllViews()
+        val tool = Store.prefs.getInt("btool", StickyBoardView.TOOL_MOVE)
+        val curColor = Store.prefs.getInt("bcolor", INK_COLORS[0])
+        val curSize = Store.prefs.getFloat("bsize", 3f)
+        fun toolBtn(res: Int, t: Int) {
+            val v = ic(res, if (tool == t) Color.WHITE else C.SUB)
+            v.background = rounded(if (tool == t) C.ACCENT else C.CARD2, 14)
+            v.setOnClickListener {
+                board?.tool = t
+                Store.prefs.edit().putInt("btool", t).apply()
+                renderBoardTools()
+            }
+            row.addView(v, LP(v.layoutParams.width, v.layoutParams.height).apply { rightMargin = dp(4) })
+        }
+        toolBtn(R.drawable.clip_ic_hand, StickyBoardView.TOOL_MOVE)
+        toolBtn(R.drawable.clip_ic_edit, StickyBoardView.TOOL_PEN)
+        toolBtn(R.drawable.clip_ic_eraser, StickyBoardView.TOOL_ERASE)
+        val undo = ic(R.drawable.clip_ic_undo, C.TEXT)
+        undo.background = rounded(C.CARD2, 14)
+        undo.setOnClickListener { board?.undo() }
+        row.addView(undo, LP(undo.layoutParams.width, undo.layoutParams.height).apply { rightMargin = dp(8) })
+
+        INK_COLORS.forEach { c ->
+            val d = View(this)
+            d.background = ovalDot(c, if (c == curColor) Color.WHITE else 0x55FFFFFF)
+            d.setOnClickListener {
+                Store.prefs.edit().putInt("bcolor", c).apply()
+                board?.applyInk()
+                if (Store.prefs.getInt("btool", 0) == StickyBoardView.TOOL_MOVE) board?.tool = StickyBoardView.TOOL_PEN
+                renderBoardTools()
+            }
+            row.addView(d, LP(dp(24), dp(24)).apply { rightMargin = dp(6); leftMargin = dp(1) })
+        }
+        val gap = View(this)
+        row.addView(gap, LP(dp(6), 1))
+        INK_SIZES.forEach { sz ->
+            val box = FrameLayout(this)
+            box.background = if (sz == curSize) rounded(C.CARD2, 12) else null
+            val dot = View(this)
+            dot.background = ovalDot(C.TEXT, null)
+            val dd = (2 + sz * 1.5f).toInt().coerceAtMost(22)
+            box.addView(dot, FrameLayout.LayoutParams(dp(dd), dp(dd), Gravity.CENTER))
+            box.setOnClickListener {
+                Store.prefs.edit().putFloat("bsize", sz).apply()
+                board?.applyInk()
+                renderBoardTools()
+            }
+            row.addView(box, LP(dp(28), dp(28)).apply { rightMargin = dp(2) })
+        }
+        val fit = ic(R.drawable.clip_ic_fullscreen, C.SUB)
+        fit.setOnClickListener { board?.fitAll() }
+        row.addView(fit, LP(fit.layoutParams.width, fit.layoutParams.height).apply { leftMargin = dp(6) })
+    }
+
+    private fun updateNoteBar() {
+        val nb = noteBar ?: return
+        val sel = board?.selected
+        if (!sticky() || editorOpen || sel == null || Store.items.none { it === sel }) { nb.visibility = View.GONE; return }
+        val row = nb.getChildAt(0) as? LinearLayout ?: return
+        row.removeAllViews()
+        nb.visibility = View.VISIBLE
+        fun add(v: View) { row.addView(v, LP(WRAP, WRAP).apply { rightMargin = dp(5) }) }
+        if (colorPick) {
+            PALETTE.forEach { pc ->
+                val d = View(this)
+                d.background = ovalDot(pc, if (pc == sel.color) Color.WHITE else null)
+                d.setOnClickListener { colorPick = false; Store.setColor(sel, pc) }
+                row.addView(d, LP(dp(26), dp(26)).apply { rightMargin = dp(6) })
+            }
+            val back = tiny("Back", C.CARD2)
+            back.setOnClickListener { colorPick = false; updateNoteBar() }
+            add(back)
+            return
+        }
+        val go = tiny("Paste", C.ACCENT, Color.WHITE)
+        go.setOnClickListener { paste(sel) }
+        add(go)
+        if (sel.image != null) {
+            val v = tiny("View", C.CARD2)
+            v.setOnClickListener { showImageViewer(sel) }
+            add(v)
+        }
+        val cp = tiny("Copy", C.CARD2)
+        cp.setOnClickListener { copyOnly(sel) }
+        add(cp)
+        val ed = tiny("Edit", C.CARD2)
+        ed.setOnClickListener { editItem(sel) }
+        add(ed)
+        val cl = tiny("Color", C.CARD2, C.ACCENT)
+        cl.setOnClickListener { colorPick = true; updateNoteBar() }
+        add(cl)
+        val pn = tiny(if (sel.pinned) "Unpin" else "Pin", C.CARD2)
+        pn.setOnClickListener { Store.togglePin(sel) }
+        add(pn)
+        val del = tiny(if (confirmNoteDel) "Tap again" else "Delete", C.CARD2, C.RED)
+        del.setOnClickListener {
+            if (confirmNoteDel) {
+                confirmNoteDel = false
+                board?.selected = null
+                Store.delete(sel)
+            } else {
+                confirmNoteDel = true
+                updateNoteBar()
+                h.postDelayed({ if (confirmNoteDel) { confirmNoteDel = false; updateNoteBar() } }, 3000)
+            }
+        }
+        add(del)
+    }
+
+    // ───────────────────────── full-quality image viewer ─────────────────────────
+
+    private fun showImageViewer(x: Item) {
+        val b = body ?: return
+        hideMenu()
+        editorOpen = true
+        setActionVis(View.GONE)
+        noteBar?.visibility = View.GONE
+        b.removeAllViews()
+        val fl = FrameLayout(this)
+        fl.background = rounded(0xFF0B0D12.toInt(), 12)
+        val zv = ZoomImageView(this)
+        fl.addView(zv, FrameLayout.LayoutParams(MATCH, MATCH))
+        zv.load(Store.imageFile(x))
+        val bar = LinearLayout(this)
+        bar.orientation = LinearLayout.HORIZONTAL
+        val fit = tiny("Fit", C.CARD2)
+        fit.setOnClickListener { zv.fit() }
+        val one = tiny("100%", C.CARD2)
+        one.setOnClickListener { zv.actual() }
+        val cl = tiny("Close", C.ACCENT, Color.WHITE)
+        cl.setOnClickListener { editorOpen = false; renderList(); updateNoteBar() }
+        bar.addView(fit, LP(WRAP, WRAP).apply { rightMargin = dp(5) })
+        bar.addView(one, LP(WRAP, WRAP).apply { rightMargin = dp(5) })
+        bar.addView(cl)
+        fl.addView(bar, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.END).apply { topMargin = dp(6); rightMargin = dp(6) })
+        b.addView(fl, FrameLayout.LayoutParams(MATCH, MATCH))
+    }
+
     // ───────────────────────── editor ─────────────────────────
 
     private fun showEditor(
         title: String, initial: String, group: String?, withGroup: Boolean, single: Boolean,
         danger: Pair<String, () -> Unit>?, allowBlank: Boolean = false, preview: Item? = null,
+        colorItem: Item? = null,
         onSave: (String, String?) -> Unit
     ) {
         val b = body ?: return
         editorOpen = true
         setActionVis(View.GONE)
+        noteBar?.visibility = View.GONE
         setFocusable(true)
         b.removeAllViews()
         var gid = group
+        var edColor = colorItem?.color ?: 0
         val col = LinearLayout(this)
         col.orientation = LinearLayout.VERTICAL
         col.addView(label(title, 13f, C.SUB))
@@ -923,6 +1210,7 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
             if (allowBlank || v.isNotBlank()) {
                 closeEditor()
                 onSave(v, gid)
+                if (colorItem != null && edColor != 0 && edColor != colorItem.color) Store.setColor(colorItem, edColor)
             }
         }
         btns.addView(cancel, LP(WRAP, WRAP).apply { rightMargin = dp(8) })
@@ -943,6 +1231,25 @@ class ClipboardWindow(private val host: AccessibilityService, private val onClos
                 gb.text = gl()
             }
             col.addView(gb, LP(WRAP, WRAP).apply { topMargin = dp(6) })
+        }
+        if (colorItem != null) {
+            val cs = HorizontalScrollView(this)
+            cs.isHorizontalScrollBarEnabled = false
+            val cr = LinearLayout(this)
+            cr.orientation = LinearLayout.HORIZONTAL
+            cr.gravity = Gravity.CENTER_VERTICAL
+            cs.addView(cr, FrameLayout.LayoutParams(WRAP, WRAP))
+            fun paintDots() {
+                cr.removeAllViews()
+                PALETTE.forEach { pc ->
+                    val d = View(this)
+                    d.background = ovalDot(pc, if (pc == edColor) Color.WHITE else null)
+                    d.setOnClickListener { edColor = pc; paintDots() }
+                    cr.addView(d, LP(dp(26), dp(26)).apply { rightMargin = dp(7) })
+                }
+            }
+            paintDots()
+            col.addView(cs, LP(MATCH, WRAP).apply { topMargin = dp(8) })
         }
 
         et.setText(initial)
